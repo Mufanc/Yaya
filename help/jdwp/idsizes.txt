@@ -1,0 +1,4 @@
+Example:
+  yaya jdwp idsizes
+
+Reports byte widths for field, method, object, reference-type and frame IDs. These widths were negotiated at attach and remain cached for this connection.

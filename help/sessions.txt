@@ -1,0 +1,4 @@
+Example:
+  yaya sessions
+
+Enumerates entries with session-shaped names under <TMPDIR>/yaya; does not verify their file type. Creates the private yaya root if absent. Does not probe sockets or delete stale directories. Use the same TMPDIR as attach. No --session or YAYA_SESSION is required.

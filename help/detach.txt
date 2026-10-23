@@ -1,0 +1,4 @@
+Example:
+  yaya detach
+
+Uses JDWP VirtualMachine.Dispose, not VM.Exit. Ends the current connection; daemon mode also removes its socket and session directory. The session ID and all its runtime references must no longer be used.

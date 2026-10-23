@@ -1,0 +1,10 @@
+Examples:
+  threads
+  class find 'com/example'
+  events --wait 30s
+  help frame get
+  exit
+
+Commands operate on the current connection; environment session selection is ignored. Help, version, prompts and input errors go to stderr; stdout contains only business JSONL. Help and input errors return to the prompt without executing a debug request. Shared command examples use the external yaya prefix; omit that prefix here.
+
+Ctrl+C interrupts an event wait; at the prompt it does nothing. detach and exit request Dispose and leave interactive mode. EOF attempts Dispose for up to 2 seconds and exits without reporting cleanup errors. EOF at an idle prompt produces no extra end record; EOF during an event wait finishes that command with reason=eof. To debug another target, end this session and start a new attach from your shell.

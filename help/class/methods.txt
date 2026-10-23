@@ -1,0 +1,4 @@
+Example:
+  yaya class methods 'Lcom/example/Card;' --type-id 0x101
+
+Use the exact loaded JNI signature. If ambiguous, select a returned type ID explicitly. Reports declared methods with IDs, names, JNI descriptors, modifiers and declaring type.

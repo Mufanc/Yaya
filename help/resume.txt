@@ -1,0 +1,5 @@
+Examples:
+  yaya resume --thread 0x12
+  yaya resume --all
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. Choose exactly one target. Sends one ThreadReference.Resume or VirtualMachine.Resume. Does not loop until running: additional suspend counts may remain. Does not remove breakpoint or step requests.

@@ -1,0 +1,4 @@
+Example:
+  yaya class find 'com/example'
+
+Matches a literal, case-sensitive substring of loaded JNI signatures, not a regex. Returns type_id, signature, status and class_loader_id. An empty pattern matches all loaded classes.

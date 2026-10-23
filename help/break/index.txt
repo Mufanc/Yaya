@@ -1,0 +1,6 @@
+Examples:
+  yaya break add 'Lcom/example/Card;->compare()Z' --pc 0x19
+  yaya break remove 77
+  yaya break clear
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. Use the returned event_request_id to remove a breakpoint. There is no local breakpoint registry or break list command. Removing breakpoints does not resume threads.

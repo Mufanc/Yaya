@@ -1,0 +1,4 @@
+Example:
+  yaya status
+
+Reports connection metadata and the shared server's event queue accounting, not a cached running/paused state.

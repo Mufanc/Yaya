@@ -1,0 +1,4 @@
+Example:
+  yaya stack --thread 0x12
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. JDWP requires the thread to be suspended. Frames include locations and separate frame/thread IDs. Pass the frame ID as the positional argument and the thread ID with -t/--thread to frame get/set. Session selection stays in the calling context. Fetch a new stack after every resume or step; do not reuse old frame IDs.

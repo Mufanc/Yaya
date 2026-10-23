@@ -1,0 +1,5 @@
+Examples:
+  yaya jdwp raw 1:1
+  yaya jdwp raw 16:3 00000000000000120000000000000000
+
+Supply payload bytes only, without the JDWP header. Omit HEX or use an empty quoted string for no payload. COMMAND-SET:COMMAND accepts decimal or 0x-prefixed values, each from 0 through 255. The second example is StackFrame.ThisObject with two 8-byte IDs; replace the IDs and use the widths reported by jdwp idsizes. Do not assume every VM uses 8-byte IDs. yaya supplies request IDs and packet framing and routes asynchronous events to the shared queue. Returns jdwp_request_id, error_code and payload_hex. A nonzero error_code is still a received raw reply; inspect it explicitly. Request timeouts have unknown outcomes and are not retried. No semantic restrictions are imposed: raw can change suspension/event requests or terminate the VM.

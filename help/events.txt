@@ -1,0 +1,6 @@
+Examples:
+  yaya events
+  yaya events --wait 30s
+  yaya events --collect 2m
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. No option: drain the backlog present when the subscription starts, then return. --wait: return after the first real event batch, or timeout; dropped-packet notices do not end the wait. A returned batch is not necessarily the breakpoint or step completion you expect; inspect its event kinds and request IDs. --collect: stream batches until timeout, but return early on a batch with a suspending or unknown policy. Durations are positive integers with s or m, from 1 second through 24 hours. No fractions or 0s. --wait and --collect are mutually exclusive. Timeout is a successful end record (reason=timeout). Delivery is acknowledged per batch after stdout output and flush succeed. An unacknowledged batch can be replayed on reconnect; sequence identifies the delivery. Overflow produces a notice with the dropped count. Ctrl+C ends this subscription, not the debug session. Only one client may connect at a time. Drain also has a 24-hour fallback deadline.

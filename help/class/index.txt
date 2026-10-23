@@ -1,0 +1,6 @@
+Examples:
+  yaya class find 'com/example'
+  yaya class methods 'Lcom/example/MainActivity;'
+  yaya class fields 'Lcom/example/MainActivity;' --type-id 0x101
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. Use runtime JNI signatures, not Java dotted names or mapping names. Classes must already be loaded. If several class loaders define the signature, the error lists type IDs and loader IDs; explore with class find, then explicitly select --type-id.

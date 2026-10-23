@@ -1,0 +1,4 @@
+Example:
+  yaya break add 'Lcom/example/Card;->compare()Z' --pc 0x19 --suspend thread
+
+Quote the full JNI/DEX method signature to protect semicolons, parentheses and '>' from the shell. --pc is a DEX offset measured in 16-bit code units, not bytes; do not multiply by two. The class must already be loaded. --type-id resolves class-loader ambiguity. Returns event_request_id. Use events to receive a hit; break add itself does not wait. Suspension: none observes without stopping, thread stops the event thread, all stops all threads.

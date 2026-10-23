@@ -1,0 +1,4 @@
+Example:
+  yaya break remove 77
+
+ID is the decimal event_request_id returned by break add. Clears that breakpoint request only; does not resume a thread already paused at it.

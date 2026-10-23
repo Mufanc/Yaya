@@ -1,0 +1,1 @@
+Inside interactive mode, enter exit to Dispose the connection and leave. Outside interactive mode, use yaya detach.

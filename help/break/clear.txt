@@ -1,0 +1,4 @@
+Example:
+  yaya break clear
+
+Sends JDWP ClearAllBreakpoints. Includes breakpoints created through raw on this connection. Does not clear other event-request kinds or resume paused threads.

@@ -1,0 +1,4 @@
+Example:
+  yaya class fields 'Lcom/example/Card;'
+
+Includes superclass and interface fields. Results carry declaring type IDs so hidden fields can be selected explicitly by object inspect/set. An unloaded class is an error.

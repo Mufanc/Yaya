@@ -1,0 +1,4 @@
+Example:
+  yaya frame get 0x0 -t 0x12 --registers v0:int,v2:object
+
+Copy fresh frame and thread IDs from stack. Specify the type of each register; yaya does not infer it. vN directly selects slot N on modern ART; slotN explicitly names a JDWP slot. Types: boolean, byte, char, short, int, long, float, double, object. Requires a suspended thread. Optimized-out or unavailable slots may be rejected by the VM.

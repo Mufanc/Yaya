@@ -1,0 +1,6 @@
+Examples:
+  yaya object instances 'Lcom/example/Card;' --limit 20
+  yaya object inspect 0x123 --fields height,mParent
+  yaya object set 0x123 height --type int --value 85
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. Objects may be collected; IDs are valid only for the target connection. No automatic suspension, retry or undo is added. JDWP decides whether an operation is allowed in the current state.

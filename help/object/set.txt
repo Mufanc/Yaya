@@ -1,0 +1,6 @@
+Examples:
+  yaya object set 0x123 height --type int --value 85
+  yaya object set 0x123 0x101:enabled --type boolean --value false
+  yaya object set 0x123 parent --type object --value null
+
+Inherited fields are searched; qualify ambiguous names with declaring-type-id:field-name. Checks the declared field type, then writes directly. No old-value read, automatic suspension, retry, read-back or undo. Object assignment compatibility is checked by the target VM. Types: boolean, byte, char, short, int, long, float, double, object. Booleans: true/false. Integer values: decimal within the type's range. char: numeric UTF-16 code unit. Object values: decimal/0x object ID or null; this does not allocate a string or object.

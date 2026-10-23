@@ -1,0 +1,5 @@
+Examples:
+  yaya jdwp idsizes
+  yaya jdwp raw 1:1
+
+Outside interactive mode, select a session using command options or YAYA_SESSION. Raw commands share the managed connection and event queue; yaya still supplies packet framing and request IDs.

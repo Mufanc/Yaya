@@ -1,0 +1,4 @@
+Example:
+  yaya object instances 'Lcom/example/Card;' --limit 20
+
+--limit is required (1..2147483647); there is no implicit unlimited scan. Uses JDWP ReferenceType.Instances. The target may not support this capability.

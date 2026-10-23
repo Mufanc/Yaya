@@ -1,0 +1,5 @@
+Examples:
+  yaya attach --port 8701
+  yaya attach --host 127.0.0.1 --port 8701 --interactive
+
+Default mode starts one daemon per session and returns its random session ID. Only one client may connect at a time. The daemon exits after 30 minutes without a client, or when the target disconnects; it does not reconnect automatically. --interactive keeps the connection in this process, without a daemon or Unix socket. Enter commands without the 'yaya' prefix; help and parsing errors do not end the session. Interactive help, version and parsing diagnostics go to stderr; stdout contains only business JSONL. Quotes use shell-style tokenization, without variable expansion or command substitution. Ctrl+C interrupts an event wait; at the prompt it does nothing. EOF, detach or exit ends the session. attach ignores YAYA_SESSION and rejects --session. The target process must already allow JDWP.

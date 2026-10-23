@@ -1,0 +1,5 @@
+Examples:
+  yaya object inspect 0x123 --fields height,mParent
+  yaya object inspect 0x123 --fields 0x101:height
+
+Only selected fields are read; inherited fields are searched. A hidden name is an ambiguity error: use declaring-type-id:field-name to choose. Static fields use the declaring type's GetValues. Reads are not an atomic snapshot, and yaya does not automatically suspend the app.
