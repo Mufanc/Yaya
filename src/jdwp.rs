@@ -328,7 +328,7 @@ impl JdwpClient {
 
         let id = self
             .next_id
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| anyhow!("JDWP request IDs exhausted; attach again"))?;
         let (sender, receiver) = oneshot::channel();
         let mut bytes = Vec::with_capacity(payload.len() + 11);

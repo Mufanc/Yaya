@@ -2,7 +2,7 @@ use anyhow::ensure;
 
 use crate::wire::{IdSizes, Reader, Writer};
 
-use super::value::Value;
+use super::value::{self, Value};
 use super::{Command, ObjectId, ReferenceTypeId, Response};
 
 const COMMAND_SET: u8 = 2;
@@ -39,13 +39,11 @@ pub struct Signature {
 impl Command for Signature {
     type Response = String;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.type_id, sizes.reference_type)?;
-
-        Ok(())
+        writer.write_id(self.type_id, sizes.reference_type)
     }
 }
 
@@ -56,13 +54,11 @@ pub struct ClassLoader {
 impl Command for ClassLoader {
     type Response = ObjectId;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.type_id, sizes.reference_type)?;
-
-        Ok(())
+        writer.write_id(self.type_id, sizes.reference_type)
     }
 }
 
@@ -73,13 +69,11 @@ pub struct Fields {
 impl Command for Fields {
     type Response = FieldMembers;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 4;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.type_id, sizes.reference_type)?;
-
-        Ok(())
+        writer.write_id(self.type_id, sizes.reference_type)
     }
 }
 
@@ -90,13 +84,11 @@ pub struct Methods {
 impl Command for Methods {
     type Response = MethodMembers;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 5;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.type_id, sizes.reference_type)?;
-
-        Ok(())
+        writer.write_id(self.type_id, sizes.reference_type)
     }
 }
 
@@ -107,13 +99,11 @@ pub struct Interfaces {
 impl Command for Interfaces {
     type Response = Vec<ReferenceTypeId>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 10;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.type_id, sizes.reference_type)?;
-
-        Ok(())
+        writer.write_id(self.type_id, sizes.reference_type)
     }
 }
 
@@ -125,7 +115,7 @@ pub struct Instances {
 impl Command for Instances {
     type Response = Vec<Value>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 16;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
@@ -148,7 +138,7 @@ pub struct GetValues {
 impl Command for GetValues {
     type Response = Vec<Value>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 6;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
@@ -167,14 +157,7 @@ impl Command for GetValues {
         reader: &mut Reader<'_>,
         sizes: IdSizes,
     ) -> anyhow::Result<Self::Response> {
-        let values = Self::Response::decode(reader, sizes)?;
-
-        ensure!(
-            values.len() == self.fields.len(),
-            "field reply count mismatch"
-        );
-
-        Ok(values)
+        value::decode_values(reader, sizes, self.fields.len(), "field")
     }
 }
 

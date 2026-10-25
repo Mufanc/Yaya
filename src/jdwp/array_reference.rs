@@ -14,12 +14,11 @@ pub struct Length {
 impl Command for Length {
     type Response = u32;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.array, sizes.object)?;
-        Ok(())
+        writer.write_id(self.array, sizes.object)
     }
 }
 
@@ -32,7 +31,7 @@ pub struct GetValues {
 impl Command for GetValues {
     type Response = Region;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
@@ -63,7 +62,7 @@ pub struct SetValues {
 impl Command for SetValues {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 3;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {

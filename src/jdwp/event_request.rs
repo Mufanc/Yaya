@@ -96,7 +96,7 @@ pub struct Clear {
 impl Command for Clear {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, _sizes: IdSizes) -> anyhow::Result<()> {
@@ -112,6 +112,6 @@ pub struct ClearAllBreakpoints;
 impl Command for ClearAllBreakpoints {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 3;
 }

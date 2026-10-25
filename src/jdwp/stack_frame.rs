@@ -2,8 +2,8 @@ use anyhow::ensure;
 
 use crate::wire::{IdSizes, Reader, Writer};
 
-use super::value::Value;
-use super::{Command, Response};
+use super::Command;
+use super::value::{self, Value};
 
 const COMMAND_SET: u8 = 16;
 
@@ -21,7 +21,7 @@ pub struct GetValues {
 impl Command for GetValues {
     type Response = Vec<Value>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
@@ -46,14 +46,7 @@ impl Command for GetValues {
         reader: &mut Reader<'_>,
         sizes: IdSizes,
     ) -> anyhow::Result<Self::Response> {
-        let values = Self::Response::decode(reader, sizes)?;
-
-        ensure!(
-            values.len() == self.slots.len(),
-            "register reply count mismatch"
-        );
-
-        Ok(values)
+        value::decode_values(reader, sizes, self.slots.len(), "register")
     }
 }
 
@@ -66,7 +59,7 @@ pub struct SetValues {
 impl Command for SetValues {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
@@ -93,7 +86,7 @@ pub struct ThisObject {
 impl Command for ThisObject {
     type Response = Value;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 3;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {

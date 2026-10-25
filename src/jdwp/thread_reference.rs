@@ -22,13 +22,11 @@ pub struct Name {
 impl Command for Name {
     type Response = String;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.thread, sizes.object)?;
-
-        Ok(())
+        writer.write_id(self.thread, sizes.object)
     }
 }
 
@@ -39,13 +37,11 @@ pub struct Resume {
 impl Command for Resume {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 3;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.thread, sizes.object)?;
-
-        Ok(())
+        writer.write_id(self.thread, sizes.object)
     }
 }
 
@@ -56,13 +52,11 @@ pub struct Status {
 impl Command for Status {
     type Response = ThreadStatus;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 4;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.thread, sizes.object)?;
-
-        Ok(())
+        writer.write_id(self.thread, sizes.object)
     }
 }
 
@@ -75,7 +69,7 @@ pub struct Frames {
 impl Command for Frames {
     type Response = Vec<Frame>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 6;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
@@ -112,12 +106,11 @@ pub struct Suspend {
 impl Command for Suspend {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.thread, sizes.object)?;
-        Ok(())
+        writer.write_id(self.thread, sizes.object)
     }
 }
 
@@ -128,11 +121,10 @@ pub struct SuspendCount {
 impl Command for SuspendCount {
     type Response = u32;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 12;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.thread, sizes.object)?;
-        Ok(())
+        writer.write_id(self.thread, sizes.object)
     }
 }

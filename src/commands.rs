@@ -106,7 +106,7 @@ impl Core {
                 })
             }
             Command::Array { command, .. } => self.array(command).await,
-            Command::Suspend { thread, all, .. } => self.suspend(thread, all).await,
+            Command::Suspend { target, .. } => self.suspend(target.thread, target.all).await,
             Command::Ddm { command, .. } => self.ddm(command).await,
             Command::Ui { command, .. } => return self.ui(command).await,
             Command::Class { command, .. } => self.class(command).await,
@@ -122,7 +122,7 @@ impl Core {
                 out,
                 ..
             } => self.step(thread, into, over, out).await,
-            Command::Resume { thread, all, .. } => self.resume(thread, all).await,
+            Command::Resume { target, .. } => self.resume(target.thread, target.all).await,
             _ => bail!("command is not valid on an attached session"),
         }?;
 

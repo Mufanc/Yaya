@@ -23,7 +23,7 @@ pub struct AllClasses;
 impl Command for AllClasses {
     type Response = Vec<LoadedClass>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 3;
 }
 
@@ -34,7 +34,7 @@ pub struct ClassesBySignature {
 impl Command for ClassesBySignature {
     type Response = Vec<MatchingClass>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, _sizes: TargetIdSizes) -> anyhow::Result<()> {
@@ -49,7 +49,7 @@ pub struct AllThreads;
 impl Command for AllThreads {
     type Response = Vec<ObjectId>;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 4;
 }
 
@@ -58,7 +58,7 @@ pub struct Dispose;
 impl Command for Dispose {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 6;
 }
 
@@ -67,7 +67,7 @@ pub struct Resume;
 impl Command for Resume {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 9;
 }
 
@@ -76,7 +76,7 @@ pub struct IdSizes;
 impl Command for IdSizes {
     type Response = TargetIdSizes;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 7;
 }
 
@@ -106,6 +106,6 @@ pub struct Suspend;
 impl Command for Suspend {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 8;
 }

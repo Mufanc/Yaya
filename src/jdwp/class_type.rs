@@ -12,13 +12,11 @@ pub struct Superclass {
 impl Command for Superclass {
     type Response = ReferenceTypeId;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.class, sizes.reference_type)?;
-
-        Ok(())
+        writer.write_id(self.class, sizes.reference_type)
     }
 }
 
@@ -30,7 +28,7 @@ pub struct SetValues {
 impl Command for SetValues {
     type Response = ();
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 2;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {

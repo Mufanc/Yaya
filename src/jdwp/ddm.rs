@@ -30,7 +30,7 @@ pub struct Chunks(pub Vec<Chunk>);
 impl Command for Request {
     type Response = Chunks;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, _sizes: IdSizes) -> anyhow::Result<()> {

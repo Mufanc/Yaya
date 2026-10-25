@@ -1,4 +1,4 @@
-use anyhow::{Error, bail};
+use anyhow::{Error, bail, ensure};
 
 use super::Response;
 
@@ -102,4 +102,17 @@ impl Response for Value {
         let tag = reader.read_u8()?;
         Self::read_untagged(tag, reader, sizes)
     }
+}
+
+pub fn decode_values(
+    reader: &mut Reader<'_>,
+    sizes: IdSizes,
+    expected: usize,
+    kind: &str,
+) -> anyhow::Result<Vec<Value>> {
+    let values = Vec::<Value>::decode(reader, sizes)?;
+
+    ensure!(values.len() == expected, "{kind} reply count mismatch");
+
+    Ok(values)
 }

@@ -200,31 +200,23 @@ pub enum Command<S: ClapArgs = SessionArgs> {
     },
     /// Send one thread or VM suspend request.
     #[command(after_help = help_text!("suspend"))]
-    #[command(group(clap::ArgGroup::new("target").required(true).args(["thread", "all"])))]
     Suspend {
         #[command(flatten)]
         #[serde(skip)]
         session: S,
-        /// Thread ID from threads or an event (decimal or 0x).
-        #[arg(short = 't', long, value_parser = wire::number)]
-        thread: Option<u64>,
-        /// Send one VM-wide Suspend request.
-        #[arg(short = 'a', long)]
-        all: bool,
+        #[command(flatten)]
+        #[serde(flatten)]
+        target: ExecutionTarget,
     },
     /// Send one thread or VM resume request.
     #[command(after_help = help_text!("resume"))]
-    #[command(group(clap::ArgGroup::new("target").required(true).args(["thread", "all"])))]
     Resume {
         #[command(flatten)]
         #[serde(skip)]
         session: S,
-        /// Thread ID from threads or an event (decimal or 0x).
-        #[arg(short = 't', long, value_parser = wire::number)]
-        thread: Option<u64>,
-        /// Send one VM-wide Resume request.
-        #[arg(short = 'a', long)]
-        all: bool,
+        #[command(flatten)]
+        #[serde(flatten)]
+        target: ExecutionTarget,
     },
     /// Drain buffered events, wait for a batch, or collect for a duration.
     #[command(after_help = help_text!("events"))]
@@ -591,6 +583,17 @@ pub enum Thread {
     },
 }
 
+#[derive(ClapArgs, Clone, Debug, Deserialize, Serialize)]
+#[group(id = "target", required = true, multiple = false)]
+pub struct ExecutionTarget {
+    /// Thread ID from threads or an event (decimal or 0x).
+    #[arg(short = 't', long, value_parser = wire::number)]
+    pub thread: Option<u64>,
+    /// Select the whole VM.
+    #[arg(short = 'a', long)]
+    pub all: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ArrayRange {
     pub start: u32,
@@ -925,6 +928,34 @@ mod tests {
             args.command,
             EntryCommand::Attach { port: 8701, .. }
         ));
+    }
+
+    #[test]
+    fn execution_targets_share_cli_rules_and_flat_wire_fields() {
+        for (name, variant) in [("suspend", "Suspend"), ("resume", "Resume")] {
+            for (target_args, thread, all) in [
+                (vec!["-t", "0x12"], Some(18u64), false),
+                (vec!["-a"], None, true),
+            ] {
+                let args =
+                    Args::try_parse_from(["yaya", name].into_iter().chain(target_args)).unwrap();
+                let EntryCommand::SessionCommand(command) = args.command else {
+                    panic!()
+                };
+                let encoded = serde_json::to_value(&command).unwrap();
+                assert_eq!(
+                    encoded[variant],
+                    serde_json::json!({"thread": thread, "all": all})
+                );
+                let decoded: Command = serde_json::from_value(encoded).unwrap();
+                assert_eq!(
+                    serde_json::to_value(decoded).unwrap(),
+                    serde_json::to_value(command).unwrap()
+                );
+            }
+            assert!(Args::try_parse_from(["yaya", name]).is_err());
+            assert!(Args::try_parse_from(["yaya", name, "-a", "-t", "1"]).is_err());
+        }
     }
 
     #[test]

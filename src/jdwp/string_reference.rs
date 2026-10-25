@@ -15,7 +15,6 @@ impl Command for Value {
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
-        writer.write_id(self.string, sizes.object)?;
-        Ok(())
+        writer.write_id(self.string, sizes.object)
     }
 }
