@@ -18,6 +18,7 @@ use super::data::{Data, Member, TypeInfo};
 impl Core {
     pub(super) async fn class(&self, command: Class) -> anyhow::Result<Data> {
         match command {
+            Class::Prepare { command } => self.class_prepare(command).await,
             Class::Find { pattern } => {
                 let classes = self.client.request(AllClasses).await?;
                 let mut types = Vec::new();

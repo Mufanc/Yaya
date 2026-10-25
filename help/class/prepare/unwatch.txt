@@ -1,0 +1,4 @@
+Examples:
+  yaya class prepare unwatch 12
+
+Sends one EventRequest.Clear with the event kind fixed by the command path and the supplied decimal VM request ID. Use an ID returned by the corresponding watch command on this connection. No local registry or clear-all operation. Does not resume suspended threads. A missing matching request is a protocol no-op, so success does not prove a request previously existed.

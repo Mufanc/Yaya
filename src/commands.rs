@@ -5,6 +5,7 @@ mod ddm;
 mod execution;
 mod frame;
 mod object;
+mod watch;
 
 use std::sync::Arc;
 
@@ -20,6 +21,7 @@ use crate::jdwp::virtual_machine::Dispose;
 use crate::wire;
 
 pub use data::Data;
+pub(crate) use data::Value;
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -118,6 +120,8 @@ impl Core {
                 Vm::Suspend => self.suspend(None).await,
                 Vm::Resume => self.resume(None).await,
             },
+            Command::Exception { command, .. } => self.exception(command).await,
+            Command::Field { command, .. } => self.field_watch(command).await,
             Command::Array { command, .. } => self.array(command).await,
             Command::Ddm { command, .. } => self.ddm(command).await,
             Command::Ui { command, .. } => return self.ui(command).await,

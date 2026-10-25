@@ -429,3 +429,63 @@ fn array_regions_distinguish_primitive_and_tagged_object_elements() {
         );
     }
 }
+
+#[test]
+fn watch_filters_preserve_wire_order_and_id_widths() {
+    let request = SetEvent {
+        kind: EventKind::Exception,
+        suspend_policy: SuspendPolicy::EventThread,
+        modifiers: vec![
+            Modifier::ExceptionOnly {
+                exception: 0x123,
+                caught: true,
+                uncaught: false,
+            },
+            Modifier::ThreadOnly(0x456),
+            Modifier::Count(3),
+        ],
+    };
+    assert_eq!(
+        encoded(request),
+        wire::unhex("040100000003080123010003000004560100000003").unwrap()
+    );
+    assert_eq!(
+        encoded(SetEvent {
+            kind: EventKind::ClassPrepare,
+            suspend_policy: SuspendPolicy::None,
+            modifiers: vec![Modifier::ClassMatch("a.*".into())],
+        }),
+        wire::unhex("0800000000010500000003612e2a").unwrap()
+    );
+    for kind in [EventKind::FieldAccess, EventKind::FieldModification] {
+        let bytes = encoded(SetEvent {
+            kind,
+            suspend_policy: SuspendPolicy::All,
+            modifiers: vec![Modifier::FieldOnly {
+                declaring: 0x101,
+                field: 0x45,
+            }],
+        });
+        assert_eq!(bytes[0], kind as u8);
+        assert_eq!(&bytes[1..], &wire::unhex("02000000010901010045").unwrap());
+        assert_eq!(
+            encoded(ClearEvent {
+                kind,
+                request_id: 77
+            }),
+            [kind as u8, 0, 0, 0, 77]
+        );
+    }
+    for count in [0, u32::MAX] {
+        let request = SetEvent {
+            kind: EventKind::Exception,
+            suspend_policy: SuspendPolicy::None,
+            modifiers: vec![Modifier::Count(count)],
+        };
+        assert!(
+            request
+                .encode_request(&mut Writer::default(), SIZES)
+                .is_err()
+        );
+    }
+}

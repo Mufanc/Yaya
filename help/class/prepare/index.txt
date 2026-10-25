@@ -1,0 +1,5 @@
+Examples:
+  yaya class prepare watch 'com.example.*'
+  yaya class prepare unwatch 12
+
+Observe future class preparation, not the start of class loading. Already prepared classes are not replayed; use class find for current types.

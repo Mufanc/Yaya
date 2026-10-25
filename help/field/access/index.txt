@@ -1,0 +1,5 @@
+Examples:
+  yaya field access watch 'Lcom/example/Card;' height
+  yaya field access unwatch 12
+
+Register or clear FIELD_ACCESS requests. Field writes are not access events.

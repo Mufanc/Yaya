@@ -50,11 +50,36 @@ fn event(kind: u8, request: u32) -> Vec<u8> {
     body.push(kind);
     body.extend(request.to_be_bytes());
     body.extend(0x12u64.to_be_bytes());
-    if kind == 1 || kind == 2 {
+    if matches!(kind, 1 | 2 | 4 | 20 | 21) {
         body.push(1);
         body.extend(0x101u64.to_be_bytes());
         body.extend(0x82u64.to_be_bytes());
         body.extend(0x19u64.to_be_bytes());
+    }
+    match kind {
+        4 => {
+            body.push(b'L');
+            body.extend(0x55u64.to_be_bytes());
+            body.extend([0; 25]);
+        }
+        8 => {
+            body.push(1);
+            body.extend(0x101u64.to_be_bytes());
+            body.extend(string("Ltest;"));
+            body.extend(2u32.to_be_bytes());
+        }
+        20 | 21 => {
+            body.push(1);
+            body.extend(0x101u64.to_be_bytes());
+            body.extend(0x45u64.to_be_bytes());
+            body.push(b'L');
+            body.extend(0x55u64.to_be_bytes());
+            if kind == 21 {
+                body.push(b'I');
+                body.extend(86i32.to_be_bytes());
+            }
+        }
+        _ => (),
     }
     packet(400, 0, 64, 100, &body)
 }
@@ -200,7 +225,12 @@ impl Fixture {
                         reply.extend(string("()Z"));
                         reply.extend(1u32.to_be_bytes());
                     }
-                    (15, 1) => reply.extend(77u32.to_be_bytes()),
+                    (15, 1) => {
+                        reply.extend(77u32.to_be_bytes());
+                        if matches!(body[0], 4 | 8 | 20 | 21) {
+                            stream.write_all(&event(body[0], 77)).unwrap();
+                        }
+                    }
                     (11, 3) => {
                         suspend_count = suspend_count.saturating_sub(1);
                         stream.write_all(&event(1, 77)).unwrap();
@@ -321,6 +351,46 @@ impl Fixture {
         records[0]["session"].as_str().unwrap().to_owned()
     }
 
+    fn run_commands(&self, interactive: bool, commands: &[&str]) -> Vec<Value> {
+        if interactive {
+            let mut child = self
+                .command()
+                .args(["attach", "-p", &self.port.to_string(), "-i"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut input = child.stdin.take().unwrap();
+            for command in commands {
+                writeln!(input, "{command}").unwrap();
+            }
+            writeln!(input, "exit").unwrap();
+            drop(input);
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        } else {
+            let session = self.attach();
+            let mut records = Vec::new();
+            for command in commands {
+                let mut args: Vec<_> = command.split_whitespace().collect();
+                args.extend(["-s", &session]);
+                records.extend(self.run(&args).1);
+            }
+            assert!(self.run(&["detach", "-s", &session]).0.status.success());
+            records
+        }
+    }
+
     fn ipc(&self, id: &str) -> UnixStream {
         let path = self.temp.join("yaya").join(id).join("control.sock");
         let deadline = Instant::now() + Duration::from_secs(2);
@@ -331,11 +401,11 @@ impl Fixture {
                 .unwrap();
             send(
                 &mut socket,
-                json!({"kind":"hello","version":9,"session":id}),
+                json!({"kind":"hello","version":10,"session":id}),
             );
             let response = recv(&mut socket);
             if response["kind"] == "ready" {
-                assert_eq!(response["version"], 9);
+                assert_eq!(response["version"], 10);
                 return socket;
             }
             assert!(Instant::now() < deadline, "{response}");
@@ -475,7 +545,7 @@ fn old_protocol_is_rejected_before_commands() {
         .unwrap();
     send(
         &mut socket,
-        json!({"kind":"hello","version":8,"session":id}),
+        json!({"kind":"hello","version":9,"session":id}),
     );
     let mut byte = [0];
     assert_eq!(
@@ -1304,43 +1374,7 @@ fn primitive_inspection_works_over_socket_and_channel() {
             "vm resume",
             "thread suspend-count -t 0x12",
         ];
-        let records: Vec<Value> = if interactive {
-            let mut child = fixture
-                .command()
-                .args(["attach", "-p", &fixture.port.to_string(), "-i"])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
-            let mut input = child.stdin.take().unwrap();
-            for command in commands {
-                writeln!(input, "{command}").unwrap();
-            }
-            writeln!(input, "exit").unwrap();
-            drop(input);
-            let output = child.wait_with_output().unwrap();
-            assert!(
-                output.status.success(),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            String::from_utf8(output.stdout)
-                .unwrap()
-                .lines()
-                .map(|line| serde_json::from_str(line).unwrap())
-                .collect()
-        } else {
-            let session = fixture.attach();
-            let mut records = Vec::new();
-            for command in commands {
-                let mut args: Vec<_> = command.split_whitespace().collect();
-                args.extend(["-s", &session]);
-                records.extend(fixture.run(&args).1);
-            }
-            assert!(fixture.run(&["detach", "-s", &session]).0.status.success());
-            records
-        };
+        let records = fixture.run_commands(interactive, &commands);
         let counts: Vec<_> = records
             .iter()
             .filter(|row| row["data"]["type"] == "suspend_count")
@@ -1389,5 +1423,92 @@ fn primitive_inspection_works_over_socket_and_channel() {
             (13, 2),
             "no hidden preflight before array write"
         );
+    }
+}
+
+#[test]
+fn watches_share_socket_and_channel_registration_delivery_and_clear() {
+    for interactive in [false, true] {
+        let fixture = Fixture::new();
+        let commands = [
+            "exception watch --all",
+            "exception watch --all --with-caught --suspend none -t 0x12 --count 2",
+            "exception watch Ltest; --type-id 0x101 --caught-only",
+            "exception unwatch 77",
+            "class prepare watch test.* --count 1",
+            "class prepare unwatch 77",
+            "field access watch Ltest; height --type-id 0x101 -t 0x12",
+            "field access unwatch 77",
+            "field modification watch Ltest; height --suspend all",
+            "field modification unwatch 77",
+            "field access watch Ltest; missing",
+            "events",
+        ];
+        let rows = fixture.run_commands(interactive, &commands);
+        assert_eq!(
+            rows.iter().filter(|row| row["kind"] == "error").count(),
+            1,
+            "{rows:?}"
+        );
+        let kinds: Vec<_> = rows
+            .iter()
+            .filter_map(|row| row["batch"]["events"].as_array())
+            .flatten()
+            .filter_map(|event| event["kind"].as_str())
+            .collect();
+        for expected in [
+            "exception",
+            "class_prepared",
+            "field_access",
+            "field_modification",
+        ] {
+            assert!(kinds.contains(&expected), "{kinds:?}");
+        }
+        let requests = fixture.requests.lock().unwrap();
+        let sets: Vec<_> = requests
+            .iter()
+            .filter(|(set, command, _)| (*set, *command) == (15, 1))
+            .map(|(_, _, body)| body)
+            .collect();
+        assert_eq!(sets.len(), 6);
+        assert_eq!(&sets[0][..7], &[4, 1, 0, 0, 0, 1, 8]);
+        assert_eq!(&sets[0][7..], &[0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+        assert_eq!(sets[1][1], 0);
+        assert_eq!(&sets[1][15..17], &[1, 1]);
+        assert_eq!(
+            &sets[1][17..],
+            &[3, 0, 0, 0, 0, 0, 0, 0, 0x12, 1, 0, 0, 0, 2]
+        );
+        assert_eq!(&sets[2][7..15], &0x101u64.to_be_bytes());
+        assert_eq!(&sets[2][15..], &[1, 0]);
+        assert_eq!(sets[3][0], 8);
+        assert_eq!(sets[3][6], 5);
+        assert_eq!(&sets[3][11..17], b"test.*");
+        assert_eq!(&sets[3][17..], &[1, 0, 0, 0, 1]);
+        for (body, kind) in [(sets[4], 20), (sets[5], 21)] {
+            assert_eq!(body[0], kind);
+            assert_eq!(body[6], 9);
+            assert_eq!(&body[7..15], &0x101u64.to_be_bytes());
+            assert_eq!(&body[15..23], &0x45u64.to_be_bytes());
+        }
+        let cleared: Vec<_> = requests
+            .iter()
+            .filter(|(set, command, _)| (*set, *command) == (15, 2))
+            .map(|(_, _, body)| body.clone())
+            .collect();
+        assert_eq!(cleared, [4, 8, 20, 21].map(|kind| vec![kind, 0, 0, 0, 77]));
+        // ClassPrepare itself must not look up already-loaded types.
+        let position = requests
+            .iter()
+            .position(|(set, command, body)| (*set, *command) == (15, 1) && body[0] == 8)
+            .unwrap();
+        assert_eq!(
+            (requests[position - 1].0, requests[position - 1].1),
+            (15, 2)
+        );
+        assert!(!requests.iter().any(|(set, command, _)| matches!(
+            (*set, *command),
+            (9, 2) | (1, 8) | (11, 2) | (1, 9) | (11, 3)
+        )));
     }
 }

@@ -1,0 +1,5 @@
+Examples:
+  yaya exception watch --all
+  yaya exception unwatch 12
+
+Watch exceptions at throw time, or clear one exception request. Default selection is uncaught only.

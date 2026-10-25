@@ -16,6 +16,10 @@ macro_rules! help_text {
     };
 }
 
+mod watch;
+
+pub use watch::{ClassPrepare, Exception, Field, FieldWatch, WatchOptions};
+
 #[derive(Parser, Debug)]
 #[command(
     version,
@@ -91,7 +95,7 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[serde(skip)]
         session: S,
     },
-    /// Find loaded classes and inspect methods or fields.
+    /// Inspect loaded classes or watch future class preparation.
     #[command(after_help = help_text!("class/index"))]
     Class {
         #[command(flatten)]
@@ -130,6 +134,26 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[command(subcommand)]
         #[serde(flatten)]
         command: StringCommand,
+    },
+    /// Register or clear exception event requests.
+    #[command(after_help = help_text!("exception/index"))]
+    Exception {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: Exception,
+    },
+    /// Register or clear field access and modification event requests.
+    #[command(after_help = help_text!("field/index"))]
+    Field {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: Field,
     },
     /// List threads, inspect stacks and control thread execution.
     #[command(after_help = help_text!("thread/index"))]
@@ -238,6 +262,8 @@ impl Command {
             | Self::Array { session, .. }
             | Self::String { session, .. }
             | Self::Thread { session, .. }
+            | Self::Exception { session, .. }
+            | Self::Field { session, .. }
             | Self::Vm { session, .. }
             | Self::Break { session, .. }
             | Self::Frame { session, .. }
@@ -251,6 +277,13 @@ impl Command {
 
 #[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
 pub enum Class {
+    /// Watch future class preparation events.
+    #[command(after_help = help_text!("class/prepare/index"))]
+    Prepare {
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: ClassPrepare,
+    },
     /// Find loaded classes by case-sensitive JNI-signature substring.
     #[command(after_help = help_text!("class/find"))]
     Find {

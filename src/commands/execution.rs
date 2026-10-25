@@ -1,4 +1,4 @@
-use anyhow::{Context, bail, ensure};
+use anyhow::{Context, ensure};
 
 use crate::cli::Break;
 use crate::jdwp::Failure;
@@ -37,12 +37,7 @@ impl Core {
                     .iter()
                     .find(|method| method.name == name && method.signature == descriptor)
                     .context("method not found")?;
-                let suspend_policy = match suspend.as_str() {
-                    "none" => SuspendPolicy::None,
-                    "thread" => SuspendPolicy::EventThread,
-                    "all" => SuspendPolicy::All,
-                    _ => bail!("invalid suspend policy"),
-                };
+                let suspend_policy = SuspendPolicy::parse(&suspend)?;
                 let request_id = self
                     .client
                     .request(Set {

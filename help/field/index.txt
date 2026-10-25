@@ -1,0 +1,5 @@
+Examples:
+  yaya field access watch 'Lcom/example/Card;' height
+  yaya field modification watch 'Lcom/example/Card;' height
+
+Watch field reads or writes. The declaring class must already be loaded. These requests apply across instances; static fields are also supported.

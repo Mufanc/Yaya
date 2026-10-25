@@ -1,3 +1,5 @@
+use anyhow::{bail, ensure};
+
 use crate::wire::{IdSizes, Writer};
 
 use super::Command;
@@ -10,6 +12,10 @@ const COMMAND_SET: u8 = 15;
 pub enum EventKind {
     SingleStep = 1,
     Breakpoint = 2,
+    Exception = 4,
+    ClassPrepare = 8,
+    FieldAccess = 20,
+    FieldModification = 21,
 }
 
 #[derive(Clone, Copy)]
@@ -18,6 +24,17 @@ pub enum SuspendPolicy {
     None = 0,
     EventThread = 1,
     All = 2,
+}
+
+impl SuspendPolicy {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match value {
+            "none" => Ok(Self::None),
+            "thread" => Ok(Self::EventThread),
+            "all" => Ok(Self::All),
+            _ => bail!("invalid suspend policy"),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -36,6 +53,17 @@ pub enum StepDepth {
 
 pub enum Modifier {
     Count(u32),
+    ThreadOnly(u64),
+    ClassMatch(String),
+    ExceptionOnly {
+        exception: u64,
+        caught: bool,
+        uncaught: bool,
+    },
+    FieldOnly {
+        declaring: u64,
+        field: u64,
+    },
     LocationOnly(Location),
     Step {
         thread: u64,
@@ -64,8 +92,33 @@ impl Command for Set {
         for modifier in &self.modifiers {
             match modifier {
                 Modifier::Count(count) => {
+                    ensure!(*count > 0, "event count must be positive");
+
                     writer.write_u8(1);
                     writer.write_i32((*count).try_into()?);
+                }
+                Modifier::ThreadOnly(thread) => {
+                    writer.write_u8(3);
+                    writer.write_id(*thread, sizes.object)?;
+                }
+                Modifier::ClassMatch(pattern) => {
+                    writer.write_u8(5);
+                    writer.write_string(pattern)?;
+                }
+                Modifier::ExceptionOnly {
+                    exception,
+                    caught,
+                    uncaught,
+                } => {
+                    writer.write_u8(8);
+                    writer.write_id(*exception, sizes.reference_type)?;
+                    writer.write_u8(u8::from(*caught));
+                    writer.write_u8(u8::from(*uncaught));
+                }
+                Modifier::FieldOnly { declaring, field } => {
+                    writer.write_u8(9);
+                    writer.write_id(*declaring, sizes.reference_type)?;
+                    writer.write_id(*field, sizes.field)?;
                 }
                 Modifier::LocationOnly(location) => {
                     writer.write_u8(7);

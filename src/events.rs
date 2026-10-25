@@ -7,7 +7,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{bail, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::commands::Value;
+use crate::jdwp::Response;
 use crate::jdwp::location::Location as JdwpLocation;
+use crate::jdwp::value::Value as ProtocolValue;
 use crate::wire::{self, IdSizes, Reader};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -30,8 +33,36 @@ impl Location {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct FieldEvent {
+    pub thread: String,
+    pub location: Location,
+    pub type_tag: u8,
+    pub type_id: String,
+    pub field_id: String,
+    pub object: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
+    Exception {
+        request_id: u32,
+        thread: String,
+        location: Location,
+        exception: Value,
+        catch_location: Option<Location>,
+    },
+    FieldAccess {
+        request_id: u32,
+        #[serde(flatten)]
+        field: FieldEvent,
+    },
+    FieldModification {
+        request_id: u32,
+        #[serde(flatten)]
+        field: FieldEvent,
+        value_to_be: Value,
+    },
     Breakpoint {
         request_id: u32,
         thread: String,
@@ -163,6 +194,59 @@ impl EventBatch {
                         }
                     }
                 }
+                4 => {
+                    let thread = wire::id(reader.read_id(sizes.object)?);
+                    let location = Location::read(&mut reader, sizes)?;
+                    let exception = read_object(&mut reader, sizes)?;
+                    let catch = JdwpLocation::read(&mut reader, sizes)?;
+                    let catch_location = if catch.type_tag == 0 {
+                        ensure!(
+                            catch.type_id == 0 && catch.method_id == 0 && catch.code_index == 0,
+                            "invalid null catch location"
+                        );
+
+                        None
+                    } else {
+                        Some(catch.into())
+                    };
+
+                    Event::Exception {
+                        request_id,
+                        thread,
+                        location,
+                        exception,
+                        catch_location,
+                    }
+                }
+                20 | 21 => {
+                    let field = FieldEvent {
+                        thread: wire::id(reader.read_id(sizes.object)?),
+                        location: Location::read(&mut reader, sizes)?,
+                        type_tag: reader.read_u8()?,
+                        type_id: wire::id(reader.read_id(sizes.reference_type)?),
+                        field_id: wire::id(reader.read_id(sizes.field)?),
+                        object: read_object(&mut reader, sizes)?,
+                    };
+
+                    if kind == 20 {
+                        Event::FieldAccess { request_id, field }
+                    } else {
+                        let value = ProtocolValue::decode(&mut reader, sizes)?;
+
+                        ensure!(
+                            !matches!(value, ProtocolValue::Void),
+                            "field modification cannot have a void value"
+                        );
+
+                        let value_to_be = value.into();
+
+                        Event::FieldModification {
+                            request_id,
+                            field,
+                            value_to_be,
+                        }
+                    }
+                }
                 6 => Event::ThreadStarted {
                     request_id,
                     thread: wire::id(reader.read_id(sizes.object)?),
@@ -224,9 +308,112 @@ impl From<JdwpLocation> for Location {
     }
 }
 
+fn read_object(reader: &mut Reader<'_>, sizes: IdSizes) -> anyhow::Result<Value> {
+    let value = ProtocolValue::decode(reader, sizes)?;
+
+    ensure!(
+        matches!(value, ProtocolValue::Object { .. }),
+        "expected tagged object ID"
+    );
+
+    Ok(value.into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn watch_events_decode_mixed_batches_and_preserve_nulls() {
+        use crate::wire::Writer;
+        let sizes = IdSizes {
+            field: 2,
+            method: 4,
+            object: 4,
+            reference_type: 2,
+            frame: 8,
+        };
+        let mut writer = Writer::default();
+        writer.write_u8(1);
+        writer.write_i32(5);
+        let location = JdwpLocation {
+            type_tag: 1,
+            type_id: 0x101,
+            method_id: 0x82,
+            code_index: 0x19,
+        };
+        for caught in [false, true] {
+            writer.write_u8(4);
+            writer.write_u32(12);
+            writer.write_id(0x12, sizes.object).unwrap();
+            location.write(&mut writer, sizes).unwrap();
+            writer.write_u8(b'L');
+            writer.write_id(0x55, sizes.object).unwrap();
+            if caught {
+                location.write(&mut writer, sizes).unwrap();
+            } else {
+                writer.write_bytes(&[0; 15]);
+            }
+        }
+        for kind in [20, 21] {
+            writer.write_u8(kind);
+            writer.write_u32(13);
+            writer.write_id(0x12, sizes.object).unwrap();
+            location.write(&mut writer, sizes).unwrap();
+            writer.write_u8(1);
+            writer.write_id(0x101, sizes.reference_type).unwrap();
+            writer.write_id(0x45, sizes.field).unwrap();
+            writer.write_u8(b'L');
+            writer
+                .write_id(if kind == 20 { 0 } else { 0x55 }, sizes.object)
+                .unwrap();
+            if kind == 21 {
+                writer.write_u8(b'J');
+                writer.write_i64(-7);
+            }
+        }
+        writer.write_u8(8);
+        writer.write_u32(14);
+        writer.write_id(0, sizes.object).unwrap();
+        writer.write_u8(1);
+        writer.write_id(0x101, sizes.reference_type).unwrap();
+        writer.write_string("Ltest;").unwrap();
+        writer.write_u32(2);
+        let bytes = writer.into_bytes();
+        let batch = EventBatch::decode(1, 64, 100, &bytes, sizes);
+        assert_eq!(batch.events.len(), 5);
+        assert!(matches!(
+            &batch.events[0],
+            Event::Exception {
+                catch_location: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            &batch.events[1],
+            Event::Exception {
+                catch_location: Some(_),
+                ..
+            }
+        ));
+        let json = serde_json::to_value(&batch).unwrap();
+        assert_eq!(json["events"][2]["object"]["value"], "null");
+        assert_eq!(json["events"][3]["field_id"], "0x45");
+        assert_eq!(json["events"][3]["value_to_be"]["value"], "-7");
+        let encoded = rmp_serde::to_vec_named(&batch).unwrap();
+        let roundtrip: EventBatch = rmp_serde::from_slice(&encoded).unwrap();
+        assert_eq!(serde_json::to_value(roundtrip).unwrap(), json);
+        for (offset, replacement) in [(29, b'I'), (36, 1)] {
+            let mut malformed = bytes.clone();
+            malformed[offset] = replacement;
+            let decoded = EventBatch::decode(1, 64, 100, &malformed, sizes);
+            assert!(matches!(&decoded.events[0], Event::Unknown { .. }));
+        }
+        let truncated = EventBatch::decode(1, 64, 100, &bytes[..bytes.len() - 1], sizes);
+        assert!(
+            matches!(&truncated.events[0], Event::Unknown { payload, .. } if payload == &bytes[..bytes.len() - 1])
+        );
+    }
 
     #[test]
     fn unknown_composite_keeps_entire_payload() {
