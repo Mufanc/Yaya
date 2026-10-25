@@ -13,7 +13,7 @@ use tokio::runtime::Builder;
 use crate::cli::{Args, EntryCommand};
 use crate::jdwp::Failure;
 use crate::reporter::Reporter;
-use crate::session::daemon::Attach;
+use crate::session::daemon::DaemonStartup;
 use crate::session::transport::Socket;
 
 fn main() {
@@ -50,8 +50,8 @@ fn run(args: Args) -> anyhow::Result<bool> {
             if interactive {
                 block_on(session::interactive::run(host, port))
             } else {
-                match Attach::fork() {
-                    Ok(attach) => block_on(attach.run(host, port)),
+                match DaemonStartup::fork() {
+                    Ok(startup) => block_on(startup.run(host, port)),
                     Err(error) => Reporter::new().finish(Err(error)),
                 }
             }

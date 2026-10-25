@@ -20,14 +20,14 @@ pub(super) enum Message {
     Accepted,
 }
 
-pub struct Attach {
+pub struct DaemonStartup {
     id: String,
     socket: UnixStream,
     parent: bool,
     cleanup: Cleanup,
 }
 
-impl Attach {
+impl DaemonStartup {
     pub fn fork() -> anyhow::Result<Self> {
         let (id, cleanup) = session::allocate()?;
         let (parent_socket, child_socket) = UnixStream::pair()?;
@@ -73,7 +73,7 @@ impl Attach {
             let result = async {
                 let socket = AsyncUnixStream::from_std(socket)?;
                 let mut channel = Socket::new(socket);
-                let message = time::timeout(Duration::from_secs(50), channel.receive())
+                let message = time::timeout(Duration::from_secs(30), channel.receive())
                     .await
                     .context("daemon startup timeout")??
                     .context("daemon exited before ready")?;

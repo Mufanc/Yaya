@@ -1,6 +1,6 @@
 mod startup;
 
-pub use startup::Attach;
+pub use startup::DaemonStartup;
 
 use startup::Message;
 
