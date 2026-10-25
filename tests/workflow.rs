@@ -483,6 +483,31 @@ fn daemon_debugging_workflow() {
     assert_eq!(records[0]["batch"]["events"][0]["kind"], "step_completed");
     let (_, records) = fixture.run(&["thread", "stack", "--session", &id, "-t", "0x12"]);
     let frame = records[0]["data"]["frames"][0]["frame"].as_str().unwrap();
+    let request_count = fixture.requests.lock().unwrap().len();
+    for selector in ["v0", "slot0", "2147483648"] {
+        let typed = format!("{selector}:int");
+        for args in [
+            vec![
+                "frame",
+                "get",
+                frame,
+                "-t",
+                "0x12",
+                "--registers",
+                &typed,
+                "-s",
+                &id,
+            ],
+            vec![
+                "frame", "set", frame, "-t", "0x12", selector, "--type", "int", "--value", "42",
+                "-s", &id,
+            ],
+        ] {
+            let (output, _) = fixture.run(&args);
+            assert!(!output.status.success(), "{args:?}");
+        }
+    }
+    assert_eq!(fixture.requests.lock().unwrap().len(), request_count);
     let (output, records) = fixture.run(&[
         "frame",
         "--session",
@@ -492,9 +517,10 @@ fn daemon_debugging_workflow() {
         "-t",
         "0x12",
         "--registers",
-        "v0:int",
+        "0:int",
     ]);
     assert!(output.status.success(), "{records:?}");
+    assert_eq!(records[0]["data"]["registers"][0][0], "0");
     assert_eq!(records[0]["data"]["registers"][0][1]["value"], "42");
     let request = fixture
         .requests
@@ -509,7 +535,7 @@ fn daemon_debugging_workflow() {
     assert_eq!(&request[..8], &0x12u64.to_be_bytes());
     assert_eq!(&request[8..16], &0x22u64.to_be_bytes());
     let (output, rows) = fixture.run(&[
-        "frame", "set", frame, "-t", "0x12", "v0", "--type", "int", "--value", "42", "-s", &id,
+        "frame", "set", frame, "-t", "0x12", "0", "--type", "int", "--value", "42", "-s", &id,
     ]);
     assert!(output.status.success(), "{rows:?}");
     let calls = fixture.requests.lock().unwrap();
@@ -520,6 +546,7 @@ fn daemon_debugging_workflow() {
         .2;
     assert_eq!(&write[..8], &0x12u64.to_be_bytes());
     assert_eq!(&write[8..16], &0x22u64.to_be_bytes());
+    assert_eq!(&write[20..24], &0u32.to_be_bytes());
     assert_eq!(&write[write.len() - 4..], &42i32.to_be_bytes());
     drop(calls);
     let (output, records) = fixture.run(&["detach", "--session", &id]);
@@ -909,7 +936,7 @@ fn commands_reject_missing_and_extra_values() {
                     "-t",
                     "0x12",
                     "--registers",
-                    "v0:int",
+                    "0:int",
                     "-s",
                     &id,
                 ],

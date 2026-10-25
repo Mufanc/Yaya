@@ -31,7 +31,7 @@ impl Core {
                 for register in registers {
                     let (name, kind) = register
                         .split_once(':')
-                        .context("register needs explicit type, e.g. v0:int")?;
+                        .context("register needs explicit type, e.g. 0:int")?;
 
                     slots.push(Slot {
                         index: slot(name)?,
@@ -100,18 +100,12 @@ impl Core {
 }
 
 fn slot(value: &str) -> anyhow::Result<u32> {
-    // shortcut: vN targets modern ART's direct slots; legacy ART requires explicit slotN.
-    let digits = value
-        .strip_prefix("slot")
-        .or_else(|| value.strip_prefix('v'))
-        .context("use vN or slotN")?;
-
     ensure!(
-        !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()),
+        !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
         "slot requires decimal digits"
     );
 
-    let slot = digits.parse::<u32>()?;
+    let slot = value.parse::<u32>()?;
 
     ensure!(slot <= i32::MAX as u32, "slot exceeds signed JDWP integer");
 
@@ -123,12 +117,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn modern_art_registers_are_direct_slots() {
-        assert_eq!(slot("v0").unwrap(), 0);
-        assert_eq!(slot("v2").unwrap(), 2);
-        assert_eq!(slot("slot2").unwrap(), 2);
-        for invalid in ["v", "v-1", "v+1", "x2", "v2147483648"] {
-            assert!(slot(invalid).is_err());
+    fn slots_are_decimal_numbers() {
+        assert_eq!(slot("0").unwrap(), 0);
+        assert_eq!(slot("2").unwrap(), 2);
+        assert_eq!(slot("2147483647").unwrap(), i32::MAX as u32);
+        for invalid in [
+            "",
+            "v0",
+            "slot2",
+            "p0",
+            "-1",
+            "+1",
+            "0x2",
+            " 2",
+            "2 ",
+            "２",
+            "2147483648",
+            "4294967296",
+        ] {
+            assert!(slot(invalid).is_err(), "{invalid:?}");
         }
     }
 }

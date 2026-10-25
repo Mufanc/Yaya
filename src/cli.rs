@@ -398,7 +398,7 @@ pub enum Frame {
         #[arg(short = 't', long, value_parser = wire::number)]
         thread: u64,
     },
-    /// Read explicitly typed DEX registers or JDWP slots.
+    /// Read explicitly typed JDWP slots.
     #[command(after_help = help_text!("frame/get"))]
     Get {
         /// Frame ID returned by thread stack (decimal or 0x); refresh after resume/step.
@@ -407,11 +407,11 @@ pub enum Frame {
         /// Thread ID belonging to this frame (decimal or 0x).
         #[arg(short = 't', long, value_parser = wire::number)]
         thread: u64,
-        /// Comma-separated register:type pairs, e.g. v0:int,v2:object or slot2:object.
+        /// Comma-separated slot:type pairs, e.g. 0:int,2:object (decimal slots).
         #[arg(long, value_delimiter = ',', required = true)]
         registers: Vec<String>,
     },
-    /// Write one typed register or slot directly; no read-back or undo.
+    /// Write one typed JDWP slot directly; no read-back or undo.
     #[command(after_help = help_text!("frame/set"))]
     Set {
         /// Frame ID returned by thread stack (decimal or 0x); refresh after resume/step.
@@ -420,7 +420,7 @@ pub enum Frame {
         /// Thread ID belonging to this frame (decimal or 0x).
         #[arg(short = 't', long, value_parser = wire::number)]
         thread: u64,
-        /// DEX register vN or explicit JDWP slotN (modern ART direct numbering).
+        /// JDWP slot number (decimal, without a prefix).
         register: String,
         /// Value type: boolean, byte, char, short, int, long, float, double, object.
         #[arg(long = "type", value_parser = wire::value_tag)]
@@ -833,15 +833,15 @@ mod tests {
     #[test]
     fn frame_ids_and_threads_are_explicit_numbers() {
         for args in [
-            vec!["frame", "get", "0x22", "-t", "18", "--registers", "v0:int"],
+            vec!["frame", "get", "0x22", "-t", "18", "--registers", "0:int"],
             vec![
-                "frame", "set", "34", "--thread", "0x12", "v0", "--type", "int", "--value", "42",
+                "frame", "set", "34", "--thread", "0x12", "0", "--type", "int", "--value", "42",
             ],
         ] {
             assert!(InteractiveArgs::try_parse_from(std::iter::once("yaya").chain(args)).is_ok());
         }
         for args in [
-            vec!["frame", "get", "0x22", "--registers", "v0:int"],
+            vec!["frame", "get", "0x22", "--registers", "0:int"],
             vec![
                 "frame",
                 "get",
@@ -849,7 +849,7 @@ mod tests {
                 "-t",
                 "0x12",
                 "--registers",
-                "v0:int",
+                "0:int",
             ],
         ] {
             assert!(InteractiveArgs::try_parse_from(std::iter::once("yaya").chain(args)).is_err());
@@ -905,7 +905,7 @@ mod tests {
                 "-t",
                 "0x12",
                 "--registers",
-                "v0:int",
+                "0:int",
                 "-s",
                 "s_abc123",
             ],
