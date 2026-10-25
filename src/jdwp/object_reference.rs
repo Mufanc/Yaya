@@ -99,3 +99,21 @@ impl Response for ObjectType {
         })
     }
 }
+
+pub struct ReferringObjects {
+    pub object: u64,
+    pub limit: u32,
+}
+
+impl Command for ReferringObjects {
+    type Response = Vec<Value>;
+
+    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND: u8 = 10;
+
+    fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
+        writer.write_id(self.object, sizes.object)?;
+        writer.write_i32(self.limit.try_into()?);
+        Ok(())
+    }
+}

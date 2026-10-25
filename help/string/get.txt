@@ -1,0 +1,4 @@
+Examples:
+  yaya string get 0x123
+
+Sends StringReference.Value and returns object and value. Reads the target string directly, without inspecting its backing array. Does not suspend, invoke methods, create strings, or pin the object against collection. Invalid or collected IDs are reported by the VM.

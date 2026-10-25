@@ -95,6 +95,8 @@ impl Fixture {
             stream.write_all(b"Handshake").unwrap();
             // VMStart before IDSizes must not deadlock or be lost.
             stream.write_all(&event(90, 0)).unwrap();
+            let mut suspend_count = 0u32;
+            let mut array_values = [10i32, 20, 30];
             loop {
                 let mut header = [0; 11];
                 if stream.read_exact(&mut header).is_err() {
@@ -117,6 +119,45 @@ impl Fixture {
                     (1, 4) => {
                         reply.extend(1u32.to_be_bytes());
                         reply.extend(0x12u64.to_be_bytes());
+                    }
+                    (10, 1) => reply = string("hello 你好"),
+                    (1, 8) | (11, 2) => suspend_count += 1,
+                    (11, 12) => reply.extend(suspend_count.to_be_bytes()),
+                    (13, 1) => reply.extend(3u32.to_be_bytes()),
+                    (13, 2) => {
+                        let start = u32::from_be_bytes(body[8..12].try_into().unwrap()) as usize;
+                        let length = u32::from_be_bytes(body[12..16].try_into().unwrap()) as usize;
+                        if start + length > array_values.len() {
+                            error = 103;
+                        } else {
+                            reply.push(b'I');
+                            reply.extend((length as u32).to_be_bytes());
+                            for value in &array_values[start..start + length] {
+                                reply.extend(value.to_be_bytes());
+                            }
+                        }
+                    }
+                    (13, 3) => {
+                        let start = u32::from_be_bytes(body[8..12].try_into().unwrap()) as usize;
+                        let count = u32::from_be_bytes(body[12..16].try_into().unwrap()) as usize;
+                        if start + count > array_values.len() {
+                            error = 103;
+                        } else {
+                            assert_eq!(body.len(), 16 + count * 4);
+                            for (index, bytes) in body[16..].chunks_exact(4).enumerate() {
+                                array_values[start + index] =
+                                    i32::from_be_bytes(bytes.try_into().unwrap());
+                            }
+                        }
+                    }
+                    (9, 10) => {
+                        reply.extend(1u32.to_be_bytes());
+                        reply.push(b'L');
+                        reply.extend(0x88u64.to_be_bytes());
+                    }
+                    (16, 3) => {
+                        reply.push(b'L');
+                        reply.extend(0x55u64.to_be_bytes());
                     }
                     (11, 1) => reply = string("main"),
                     (11, 4) => {
@@ -161,6 +202,7 @@ impl Fixture {
                     }
                     (15, 1) => reply.extend(77u32.to_be_bytes()),
                     (11, 3) => {
+                        suspend_count = suspend_count.saturating_sub(1);
                         stream.write_all(&event(1, 77)).unwrap();
                     }
                     (11, 6) => {
@@ -178,7 +220,8 @@ impl Fixture {
                             reply.extend(42u32.to_be_bytes());
                         }
                     }
-                    (16, 2) | (15, 2) | (15, 3) | (1, 9) => (),
+                    (1, 9) => suspend_count = suspend_count.saturating_sub(1),
+                    (16, 2) | (15, 2) | (15, 3) => (),
                     (1, 6) => {
                         stream.write_all(&packet(id, 0x80, 0, 0, &[])).unwrap();
                         break;
@@ -1195,5 +1238,118 @@ fn ddm_commands_share_socket_and_channel_paths() {
             .find(|(set, _, body)| *set == 199 && body.starts_with(b"VUOP"))
             .unwrap();
         assert!(!capture.2.windows(11).any(|bytes| bytes == b"capture.png"));
+    }
+}
+
+#[test]
+fn primitive_inspection_works_over_socket_and_channel() {
+    for interactive in [false, true] {
+        let fixture = Fixture::new();
+        let commands = [
+            "thread suspend-count -t 0x12",
+            "suspend -t 0x12",
+            "suspend --all",
+            "thread suspend-count -t 0x12",
+            "frame this 0x22 -t 0x12",
+            "string get 0x55",
+            "object referrers 0x55 --limit 0",
+            "array length 0x66",
+            "array get 0x66 0:3",
+            "array set 0x66 1:3 --type int --values=-7,42",
+            "array get 0x66 0:3",
+            "array get 0x66 3:3",
+            "array get 0x66 4:5",
+            "array set 0x66 0:1 --type byte --values=256",
+            "array set 0x66 0:2 --type int --values=1",
+            "resume -t 0x12",
+            "thread suspend-count -t 0x12",
+            "resume --all",
+            "thread suspend-count -t 0x12",
+        ];
+        let records: Vec<Value> = if interactive {
+            let mut child = fixture
+                .command()
+                .args(["attach", "-p", &fixture.port.to_string(), "-i"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut input = child.stdin.take().unwrap();
+            for command in commands {
+                writeln!(input, "{command}").unwrap();
+            }
+            writeln!(input, "exit").unwrap();
+            drop(input);
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect()
+        } else {
+            let session = fixture.attach();
+            let mut records = Vec::new();
+            for command in commands {
+                let mut args: Vec<_> = command.split_whitespace().collect();
+                args.extend(["-s", &session]);
+                records.extend(fixture.run(&args).1);
+            }
+            assert!(fixture.run(&["detach", "-s", &session]).0.status.success());
+            records
+        };
+        let counts: Vec<_> = records
+            .iter()
+            .filter(|row| row["data"]["type"] == "suspend_count")
+            .map(|row| row["data"]["count"].as_u64().unwrap())
+            .collect();
+        assert_eq!(counts, [0, 2, 1, 0]);
+        assert!(
+            records
+                .iter()
+                .any(|row| row["data"]["type"] == "this_object"
+                    && row["data"]["object"]["value"] == "0x55")
+        );
+        assert!(
+            records
+                .iter()
+                .any(|row| row["data"]["value"] == "hello 你好")
+        );
+        assert!(records.iter().any(|row| row["data"]["type"] == "referrers"
+            && row["data"]["objects"][0]["value"] == "0x88"));
+        assert!(records.iter().any(|row| row["data"]["length"] == 3));
+        assert!(
+            records
+                .iter()
+                .any(|row| row["data"]["values"][1]["value"] == "-7"
+                    && row["data"]["values"][2]["value"] == "42")
+        );
+        assert!(records.iter().any(|row| row["data"]["values"] == json!([])));
+        assert_eq!(
+            records.iter().filter(|row| row["kind"] == "error").count(),
+            3,
+            "{records:?}"
+        );
+        let requests = fixture.requests.lock().unwrap();
+        let writes: Vec<_> = requests
+            .iter()
+            .filter(|(set, command, _)| (*set, *command) == (13, 3))
+            .collect();
+        assert_eq!(writes.len(), 1, "invalid byte must not be sent");
+        assert_eq!(&writes[0].2[16..], &[255, 255, 255, 249, 0, 0, 0, 42]);
+        let position = requests
+            .iter()
+            .position(|(set, command, _)| (*set, *command) == (13, 3))
+            .unwrap();
+        assert_eq!(
+            (requests[position - 1].0, requests[position - 1].1),
+            (13, 2),
+            "no hidden preflight before array write"
+        );
     }
 }

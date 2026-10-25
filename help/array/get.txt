@@ -1,0 +1,5 @@
+Examples:
+  yaya array get 0x123 2
+  yaya array get 0x123 0:4
+
+Sends one ArrayReference.GetValues request. Use INDEX to select one element, or START:END for a half-open range: start is inclusive and end is exclusive. Both endpoints are decimal integers from 0 through 2147483647, with end >= start. Equal endpoints request an empty range. The request uses firstIndex=start and length=end-start. No length preflight, pagination or automatic truncation. The VM validates bounds even for length 0; use an in-bounds start index. Output includes array, start, the region tag and typed values. Primitive elements share the region type; reference elements preserve their individual tags and IDs, with null represented as null text. Does not dereference strings or nested arrays. Concurrent writes can change the observed values; no snapshot is guaranteed.

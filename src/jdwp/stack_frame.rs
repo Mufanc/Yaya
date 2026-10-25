@@ -84,3 +84,21 @@ impl Command for SetValues {
         Ok(())
     }
 }
+
+pub struct ThisObject {
+    pub thread: u64,
+    pub frame: u64,
+}
+
+impl Command for ThisObject {
+    type Response = Value;
+
+    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND: u8 = 3;
+
+    fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {
+        writer.write_id(self.thread, sizes.object)?;
+        writer.write_id(self.frame, sizes.frame)?;
+        Ok(())
+    }
+}

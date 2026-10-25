@@ -76,12 +76,8 @@ impl Value {
 
         Ok(())
     }
-}
 
-impl Response for Value {
-    fn decode(reader: &mut Reader<'_>, sizes: IdSizes) -> anyhow::Result<Self> {
-        let tag = reader.read_u8()?;
-
+    pub fn read_untagged(tag: u8, reader: &mut Reader<'_>, sizes: IdSizes) -> anyhow::Result<Self> {
         Ok(match tag {
             b'Z' => Self::Boolean(reader.read_u8()? != 0),
             b'B' => Self::Byte(reader.read_i8()?),
@@ -98,5 +94,12 @@ impl Response for Value {
             },
             _ => bail!("unsupported value tag {tag}"),
         })
+    }
+}
+
+impl Response for Value {
+    fn decode(reader: &mut Reader<'_>, sizes: IdSizes) -> anyhow::Result<Self> {
+        let tag = reader.read_u8()?;
+        Self::read_untagged(tag, reader, sizes)
     }
 }

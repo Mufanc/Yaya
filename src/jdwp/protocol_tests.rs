@@ -267,3 +267,165 @@ fn response_types_select_their_own_wire_layout() {
     assert!(decoded(Dispose, &[]).is_ok());
     assert!(decoded(Dispose, &[0]).is_err());
 }
+
+#[test]
+fn primitive_inspection_request_layouts() {
+    use super::array_reference::{GetValues as GetArray, Length, SetValues as SetArray};
+    use super::object_reference::ReferringObjects;
+    use super::stack_frame::ThisObject;
+    use super::string_reference::Value as StringValue;
+    use super::thread_reference::{Suspend, SuspendCount};
+    use super::virtual_machine::Suspend as SuspendVm;
+
+    assert_eq!((SuspendVm::COMMAND_SET, SuspendVm::COMMAND), (1, 8));
+    assert!(encoded(SuspendVm).is_empty());
+    assert_eq!((Suspend::COMMAND_SET, Suspend::COMMAND), (11, 2));
+    assert_eq!(encoded(Suspend { thread: 0x12 }), [0, 0, 0, 0x12]);
+    assert_eq!((SuspendCount::COMMAND_SET, SuspendCount::COMMAND), (11, 12));
+    assert_eq!(
+        decoded(SuspendCount { thread: 0x12 }, &[0, 0, 0, 2]).unwrap(),
+        2
+    );
+    assert_eq!((StringValue::COMMAND_SET, StringValue::COMMAND), (10, 1));
+    assert_eq!(encoded(StringValue { string: 0x34 }), [0, 0, 0, 0x34]);
+    let mut writer = Writer::default();
+    writer.write_string("你好\0🎵").unwrap();
+    assert_eq!(
+        decoded(StringValue { string: 0x34 }, &writer.into_bytes()).unwrap(),
+        "你好\0🎵"
+    );
+    assert_eq!((ThisObject::COMMAND_SET, ThisObject::COMMAND), (16, 3));
+    assert_eq!(
+        encoded(ThisObject {
+            thread: 0x12,
+            frame: 0x34
+        }),
+        wire::unhex("000000120000000000000034").unwrap()
+    );
+    assert!(matches!(
+        decoded(
+            ThisObject {
+                thread: 0x12,
+                frame: 0x34
+            },
+            b"L\0\0\0\0"
+        )
+        .unwrap(),
+        Value::Object { id: 0, .. }
+    ));
+    assert_eq!(
+        (ReferringObjects::COMMAND_SET, ReferringObjects::COMMAND),
+        (9, 10)
+    );
+    assert_eq!(
+        encoded(ReferringObjects {
+            object: 0x34,
+            limit: 0
+        }),
+        wire::unhex("0000003400000000").unwrap()
+    );
+    assert_eq!((Length::COMMAND_SET, Length::COMMAND), (13, 1));
+    assert_eq!(encoded(Length { array: 0x34 }), [0, 0, 0, 0x34]);
+    assert_eq!(
+        encoded(GetArray {
+            array: 0x34,
+            start: 1,
+            length: 2
+        }),
+        wire::unhex("000000340000000100000002").unwrap()
+    );
+    assert_eq!((SetArray::COMMAND_SET, SetArray::COMMAND), (13, 3));
+    assert_eq!(
+        encoded(SetArray {
+            array: 0x34,
+            start: 1,
+            values: vec![Value::Int(-7), Value::Int(42)]
+        }),
+        wire::unhex("000000340000000100000002fffffff90000002a").unwrap()
+    );
+    assert_eq!(
+        encoded(SetArray {
+            array: 0x34,
+            start: 0,
+            values: vec![Value::Object { tag: b'L', id: 0 }]
+        }),
+        wire::unhex("00000034000000000000000100000000").unwrap()
+    );
+    assert!(
+        GetArray {
+            array: 0,
+            start: u32::MAX,
+            length: 0
+        }
+        .encode_request(&mut Writer::default(), SIZES)
+        .is_err()
+    );
+    assert!(
+        ReferringObjects {
+            object: 0,
+            limit: u32::MAX
+        }
+        .encode_request(&mut Writer::default(), SIZES)
+        .is_err()
+    );
+}
+
+#[test]
+fn array_regions_distinguish_primitive_and_tagged_object_elements() {
+    use super::array_reference::GetValues as GetArray;
+    let request = || GetArray {
+        array: 1,
+        start: 0,
+        length: 2,
+    };
+    let primitive = decoded(
+        request(),
+        &wire::unhex("4900000002fffffff90000002a").unwrap(),
+    )
+    .unwrap();
+    assert_eq!(primitive.tag, b'I');
+    assert!(matches!(
+        primitive.values.as_slice(),
+        [Value::Int(-7), Value::Int(42)]
+    ));
+    let objects = decoded(
+        request(),
+        &wire::unhex("4c0000000273000000125b00000000").unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        objects.values.as_slice(),
+        [
+            Value::Object {
+                tag: b's',
+                id: 0x12
+            },
+            Value::Object { tag: b'[', id: 0 }
+        ]
+    ));
+    assert!(
+        decoded(
+            GetArray {
+                array: 1,
+                start: 0,
+                length: 0
+            },
+            b"I\0\0\0\0"
+        )
+        .unwrap()
+        .values
+        .is_empty()
+    );
+    for invalid in [
+        "490000000200",
+        "490000000100000001",
+        "5600000000",
+        "4c0000000249000000014900000002",
+        "49ffffffff",
+    ] {
+        assert!(
+            decoded(request(), &wire::unhex(invalid).unwrap()).is_err(),
+            "{invalid}"
+        );
+    }
+}

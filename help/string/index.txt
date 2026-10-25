@@ -1,0 +1,4 @@
+Examples:
+  yaya string get 0x123
+
+Read string contents using StringReference.Value. Outside interactive mode, select a session using command options or YAYA_SESSION. IDs are runtime string object IDs, not addresses or literal text. No string creation or mutation is provided.

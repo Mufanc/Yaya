@@ -6,10 +6,11 @@ It complements [apkq](https://github.com/Mufanc/apkq): apkq explains what is in 
 
 ## What it can do
 
-- **Explore runtime types and objects.** Find loaded classes, inspect methods and inherited fields, enumerate instances, and read or write selected fields. Resolve class-loader ambiguity with explicit type IDs.
+- **Explore runtime types and objects.** Find loaded classes, inspect methods and inherited fields, enumerate instances, query direct referrers, and read or write selected fields. Resolve class-loader ambiguity with explicit type IDs.
 - **Stop at precise code locations.** Set breakpoints using full method signatures and DEX offsets, choosing whether to suspend the event thread, all threads, or neither.
-- **Inspect execution state.** List threads, inspect call stacks, and read or write explicitly typed registers in suspended frames.
-- **Control execution.** Step into, over or out of methods, then resume a thread or the whole VM. Stepping returns after registration and resume; events report what actually happens next.
+- **Inspect execution state.** List threads, inspect call stacks, query suspend counts and frame receivers, and read or write explicitly typed registers in suspended frames.
+- **Inspect strings and arrays.** Read string contents, query array lengths, and read or write explicit element ranges.
+- **Control execution.** Explicitly suspend a thread or the VM. Step into, over or out of methods, then resume a thread or the whole VM. Stepping returns after registration and resume; events report what actually happens next.
 - **Observe debugging events.** Drain queued events, wait for the next batch, or collect events for a duration.
 - **Inspect the interface.** Enumerate process windows, inspect fresh View hierarchies and exported properties, and capture a selected View as a local PNG through Android DDM.
 - **Access the underlying protocol.** Query DDM features or send raw JDWP requests and DDM chunks through the same connection and event queue when a higher-level command is not enough.

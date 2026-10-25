@@ -1,0 +1,4 @@
+Examples:
+  yaya object referrers 0x123 --limit 20
+
+Sends ObjectReference.ReferringObjects. --limit is required, from 0 through 2147483647; 0 asks for all referring objects. Returns direct referring objects reachable for garbage collection, with tags and IDs. Stack locals and JNI global roots are not included. This is not a complete GC-root path or recursive graph traversal. Requires target support; NOT_IMPLEMENTED is returned without fallback. No implicit GC, suspension or object pinning.

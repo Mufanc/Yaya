@@ -1,0 +1,4 @@
+Examples:
+  yaya thread suspend-count -t 0x12
+
+Sends ThreadReference.SuspendCount once and returns thread and count. This is a point-in-time query; yaya maintains no local counter or running-state mirror. It does not change suspension or automatically balance resume calls.

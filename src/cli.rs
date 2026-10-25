@@ -111,6 +111,36 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[serde(flatten)]
         command: Object,
     },
+    /// Query array length or read and write a range of elements.
+    #[command(after_help = help_text!("array/index"))]
+    Array {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: Array,
+    },
+    /// Read the contents of a VM string.
+    #[command(after_help = help_text!("string/index"))]
+    String {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: StringCommand,
+    },
+    /// Query an individual thread.
+    #[command(after_help = help_text!("thread/index"))]
+    Thread {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: Thread,
+    },
     /// Add or remove DEX-location breakpoints.
     #[command(after_help = help_text!("break/index"))]
     Break {
@@ -167,6 +197,20 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         /// Run until this method returns to its caller.
         #[arg(long)]
         out: bool,
+    },
+    /// Send one thread or VM suspend request.
+    #[command(after_help = help_text!("suspend"))]
+    #[command(group(clap::ArgGroup::new("target").required(true).args(["thread", "all"])))]
+    Suspend {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        /// Thread ID from threads or an event (decimal or 0x).
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: Option<u64>,
+        /// Send one VM-wide Suspend request.
+        #[arg(short = 'a', long)]
+        all: bool,
     },
     /// Send one thread or VM resume request.
     #[command(after_help = help_text!("resume"))]
@@ -247,6 +291,10 @@ impl Command {
             | Self::Threads { session, .. }
             | Self::Class { session, .. }
             | Self::Object { session, .. }
+            | Self::Array { session, .. }
+            | Self::String { session, .. }
+            | Self::Thread { session, .. }
+            | Self::Suspend { session, .. }
             | Self::Break { session, .. }
             | Self::Frame { session, .. }
             | Self::Jdwp { session, .. }
@@ -290,6 +338,15 @@ pub enum Class {
 
 #[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
 pub enum Object {
+    /// List objects that directly reference this object.
+    #[command(after_help = help_text!("object/referrers"))]
+    Referrers {
+        #[arg(value_parser = wire::number)]
+        object: u64,
+        /// Maximum referrers; 0 requests all. Does not include stack/JNI roots.
+        #[arg(long, value_parser = clap::value_parser!(u32).range(0..=2147483647))]
+        limit: u32,
+    },
     /// List up to LIMIT live instances of a loaded class.
     #[command(after_help = help_text!("object/instances"))]
     Instances {
@@ -359,6 +416,14 @@ pub enum Break {
 
 #[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
 pub enum Frame {
+    /// Get the current frame's this object; static/native frames may return null.
+    #[command(after_help = help_text!("frame/this"))]
+    This {
+        #[arg(value_parser = wire::number)]
+        frame: u64,
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: u64,
+    },
     /// Read explicitly typed DEX registers or JDWP slots.
     #[command(after_help = help_text!("frame/get"))]
     Get {
@@ -505,6 +570,93 @@ pub fn duration(value: &str) -> Result<u64, String> {
         .ok_or_else(|| "duration must be 1 second through 24 hours".into())
 }
 
+#[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
+pub enum StringCommand {
+    /// Read a string's contents without traversing its implementation fields.
+    #[command(after_help = help_text!("string/get"))]
+    Get {
+        /// Runtime string object ID (decimal or 0x).
+        #[arg(value_parser = wire::number)]
+        object: u64,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
+pub enum Thread {
+    /// Query the VM's current suspend count; no locally maintained counter.
+    #[command(after_help = help_text!("thread/suspend-count"))]
+    SuspendCount {
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: u64,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArrayRange {
+    pub start: u32,
+    pub length: u32,
+}
+
+fn array_range(value: &str) -> Result<ArrayRange, String> {
+    let parse_index = |part: &str| {
+        part.parse::<u32>()
+            .ok()
+            .filter(|index| *index <= i32::MAX as u32)
+            .filter(|_| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+            .ok_or_else(|| "range endpoints must be decimal integers in 0..2147483647".to_owned())
+    };
+    let (start, length) = if let Some((start, end)) = value.split_once(':') {
+        let start = parse_index(start)?;
+        let end = parse_index(end)?;
+        let length = end.checked_sub(start).ok_or("range end must be >= start")?;
+
+        (start, length)
+    } else {
+        (parse_index(value)?, 1)
+    };
+
+    Ok(ArrayRange { start, length })
+}
+
+#[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
+pub enum Array {
+    /// Query the number of elements.
+    #[command(after_help = help_text!("array/length"))]
+    Length {
+        #[arg(value_parser = wire::number)]
+        array: u64,
+    },
+    /// Read an explicit range; the target reports element types.
+    #[command(after_help = help_text!("array/get"))]
+    Get {
+        #[arg(value_parser = wire::number)]
+        array: u64,
+        /// One index or a half-open start:end range (decimal).
+        #[arg(value_name = "INDEX|START:END", value_parser = array_range)]
+        range: ArrayRange,
+    },
+    /// Write an explicit range directly, without reading or suspending.
+    #[command(after_help = help_text!("array/set"))]
+    Set {
+        #[arg(value_parser = wire::number)]
+        array: u64,
+        /// One index or a half-open start:end range (decimal).
+        #[arg(value_name = "INDEX|START:END", value_parser = array_range)]
+        range: ArrayRange,
+        /// Exact primitive component type, or object for reference arrays.
+        #[arg(long = "type", value_parser = wire::value_tag)]
+        tag: u8,
+        /// Comma-separated typed values; object IDs/null for reference arrays.
+        #[arg(
+            long,
+            value_delimiter = ',',
+            allow_hyphen_values = true,
+            value_parser = clap::builder::NonEmptyStringValueParser::new()
+        )]
+        values: Vec<String>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -578,6 +730,51 @@ mod tests {
             vec!["ui", "capture", "-w", "window", "-v", "View@1"],
         ] {
             assert!(Args::try_parse_from(std::iter::once("yaya").chain(args)).is_err());
+        }
+    }
+
+    #[test]
+    fn primitive_inspection_requires_explicit_valid_arguments() {
+        for args in [
+            vec!["suspend"],
+            vec!["suspend", "-t", "1", "--all"],
+            vec!["thread", "suspend-count"],
+            vec!["frame", "this", "1"],
+            vec!["array", "get", "1", "--start", "0"],
+            vec!["array", "get", "1"],
+            vec!["array", "set", "1", "0:0", "--type", "int", "--values="],
+            vec!["object", "referrers", "1", "--limit", "2147483648"],
+        ] {
+            assert!(Args::try_parse_from(std::iter::once("yaya").chain(args)).is_err());
+        }
+    }
+
+    #[test]
+    fn array_ranges_are_half_open_and_bounded() {
+        for (text, start, length) in [
+            ("2", 2, 1),
+            ("2147483647", 2147483647, 1),
+            ("2:5", 2, 3),
+            ("0:0", 0, 0),
+            ("2147483647:2147483647", 2147483647, 0),
+        ] {
+            let range = array_range(text).unwrap();
+            assert_eq!((range.start, range.length), (start, length));
+            assert!(InteractiveArgs::try_parse_from(["yaya", "array", "get", "1", text]).is_ok());
+        }
+        for text in [
+            "",
+            "2147483648",
+            ":3",
+            "2:",
+            "3:2",
+            "-1:2",
+            "0x1:2",
+            "0:2147483648",
+            "1:2:3",
+            "+1:2",
+        ] {
+            assert!(array_range(text).is_err(), "{text}");
         }
     }
 

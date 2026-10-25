@@ -53,7 +53,7 @@ pub struct Set {
 impl Command for Set {
     type Response = u32;
 
-    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND_SET: u8 = COMMAND_SET;
     const COMMAND: u8 = 1;
 
     fn encode_request(&self, writer: &mut Writer, sizes: IdSizes) -> anyhow::Result<()> {

@@ -1,0 +1,4 @@
+Examples:
+  yaya array length 0x123
+
+Sends ArrayReference.Length and returns array and length. No implicit element read or suspension.

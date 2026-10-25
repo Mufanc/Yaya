@@ -57,6 +57,33 @@ pub struct FrameInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Data {
+    StringValue {
+        object: String,
+        value: String,
+    },
+    ArrayLength {
+        array: String,
+        length: u32,
+    },
+    ArrayValues {
+        array: String,
+        start: u32,
+        tag: u8,
+        values: Vec<Value>,
+    },
+    ThisObject {
+        thread: String,
+        frame: String,
+        object: Value,
+    },
+    Referrers {
+        object: String,
+        objects: Vec<Value>,
+    },
+    SuspendCount {
+        thread: String,
+        count: u32,
+    },
     DdmFeatures {
         features: Vec<String>,
     },

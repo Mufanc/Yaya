@@ -2,7 +2,7 @@ use anyhow::{Context, bail, ensure};
 
 use crate::cli::Object;
 use crate::jdwp::class_type::SetValues as SetStaticValues;
-use crate::jdwp::object_reference::{GetValues, ReferenceType, SetValues};
+use crate::jdwp::object_reference::{GetValues, ReferenceType, ReferringObjects, SetValues};
 use crate::jdwp::reference_type::{GetValues as GetStaticValues, Instances, STATIC_MODIFIER};
 use crate::jdwp::value::Value;
 use crate::wire;
@@ -13,6 +13,17 @@ use super::data::{Data, FieldValue, Member};
 impl Core {
     pub(super) async fn object(&self, command: Object) -> anyhow::Result<Data> {
         match command {
+            Object::Referrers { object, limit } => {
+                let objects = self
+                    .client
+                    .request(ReferringObjects { object, limit })
+                    .await?;
+
+                Ok(Data::Referrers {
+                    object: wire::id(object),
+                    objects: objects.into_iter().map(Into::into).collect(),
+                })
+            }
             Object::Instances {
                 class,
                 type_id,

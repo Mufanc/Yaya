@@ -1,0 +1,7 @@
+Examples:
+  yaya array get 0x123 2
+  yaya array length 0x123
+  yaya array get 0x123 0:4
+  yaya array set 0x123 1:3 --type int --values=-7,42
+
+Direct ArrayReference operations. Outside interactive mode, select a session using command options or YAYA_SESSION. Reads and writes do not suspend the target or cache array state. Length and indexes are decimal nonnegative signed JDWP integers.

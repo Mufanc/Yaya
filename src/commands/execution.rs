@@ -6,8 +6,10 @@ use crate::jdwp::event_request::{
     Clear, ClearAllBreakpoints, EventKind, Modifier, Set, StepDepth, StepSize, SuspendPolicy,
 };
 use crate::jdwp::location::Location;
-use crate::jdwp::thread_reference::{Name, Resume as ResumeThread, Status};
-use crate::jdwp::virtual_machine::{AllThreads, Resume as ResumeVm};
+use crate::jdwp::thread_reference::{
+    Name, Resume as ResumeThread, Status, Suspend as SuspendThread,
+};
+use crate::jdwp::virtual_machine::{AllThreads, Resume as ResumeVm, Suspend as SuspendVm};
 use crate::wire;
 
 use super::Core;
@@ -151,6 +153,18 @@ impl Core {
             event_request_id: request_id,
             operation: "step_started".into(),
         })
+    }
+
+    pub(super) async fn suspend(&self, thread: Option<u64>, all: bool) -> anyhow::Result<Data> {
+        ensure!(thread.is_some() != all, "choose thread or all");
+
+        if let Some(thread) = thread {
+            self.client.request(SuspendThread { thread }).await?;
+        } else {
+            self.client.request(SuspendVm).await?;
+        }
+
+        Ok(super::confirmed("suspend_once"))
     }
 
     pub(super) async fn resume(&self, thread: Option<u64>, all: bool) -> anyhow::Result<Data> {

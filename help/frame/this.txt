@@ -1,0 +1,4 @@
+Examples:
+  yaya frame this 0x0 -t 0x12
+
+Sends StackFrame.ThisObject with explicit frame and thread IDs. Use a current frame from stack; the thread must be suspended as required by the VM. Static/native frames may return null. Output preserves the tagged object reference. Does not infer a register slot or auto-suspend. Frame IDs become stale when their thread resumes.

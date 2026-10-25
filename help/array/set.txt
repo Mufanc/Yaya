@@ -1,0 +1,7 @@
+Examples:
+  yaya array set 0x123 2 --type int --values=42
+  yaya array set 0x123 2:2 --type int
+  yaya array set 0x123 0:2 --type int --values=-7,42
+  yaya array set 0x123 0:2 --type object --values=0x456,null
+
+Sends one ArrayReference.SetValues with consecutive untagged values. Use INDEX for one element or START:END for a half-open range, as in array get. Both endpoints are decimal integers from 0 through 2147483647, with end >= start. Omitting --values supplies zero values and is valid only for an empty range; --values= is rejected. --type remains required for empty ranges. The value count must equal the selected length; a mismatch fails before sending a JDWP request. --type is required: boolean, byte, char, short, int, long, float, double or object. Use --values=... when values start with a minus sign. Specify the exact primitive component type, or object for all reference arrays including String[] and nested arrays. No type discovery, read-before-write, suspension, retry, rollback or read-back. The VM checks bounds and reference assignment compatibility; incorrect primitive type selection is caller error because the protocol carries no per-element type tags. Object values are existing IDs or null; strings are not allocated.

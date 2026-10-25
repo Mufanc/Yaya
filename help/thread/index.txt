@@ -1,0 +1,4 @@
+Examples:
+  yaya thread suspend-count -t 0x12
+
+Query an individual thread using its runtime object ID. Outside interactive mode, select a session using command options or YAYA_SESSION. Use threads to enumerate IDs.

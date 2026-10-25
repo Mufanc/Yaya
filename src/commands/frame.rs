@@ -1,7 +1,7 @@
 use anyhow::{Context, Error, ensure};
 
 use crate::cli::Frame;
-use crate::jdwp::stack_frame::{GetValues, SetValues, Slot};
+use crate::jdwp::stack_frame::{GetValues, SetValues, Slot, ThisObject};
 use crate::jdwp::thread_reference::Frames;
 use crate::jdwp::value::Value;
 use crate::wire;
@@ -12,6 +12,14 @@ use super::data::{Data, FrameInfo};
 impl Core {
     pub(super) async fn frame(&self, command: Frame) -> anyhow::Result<Data> {
         match command {
+            Frame::This { frame, thread } => {
+                let object = self.client.request(ThisObject { thread, frame }).await?;
+                Ok(Data::ThisObject {
+                    thread: wire::id(thread),
+                    frame: wire::id(frame),
+                    object: object.into(),
+                })
+            }
             Frame::Get {
                 frame,
                 thread,

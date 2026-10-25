@@ -1,3 +1,4 @@
+mod array;
 mod class;
 mod data;
 mod ddm;
@@ -11,8 +12,10 @@ use anyhow::{Error, bail};
 use clap::Args as ClapArgs;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::{Command, Jdwp};
+use crate::cli::{Command, Jdwp, StringCommand, Thread};
 use crate::jdwp::JdwpClient;
+use crate::jdwp::string_reference::Value as StringValue;
+use crate::jdwp::thread_reference::SuspendCount;
 use crate::jdwp::virtual_machine::Dispose;
 use crate::wire;
 
@@ -82,6 +85,28 @@ impl Core {
                 })
             }
 
+            Command::String {
+                command: StringCommand::Get { object },
+                ..
+            } => {
+                let value = client.request(StringValue { string: object }).await?;
+                Ok(Data::StringValue {
+                    object: wire::id(object),
+                    value,
+                })
+            }
+            Command::Thread {
+                command: Thread::SuspendCount { thread },
+                ..
+            } => {
+                let count = client.request(SuspendCount { thread }).await?;
+                Ok(Data::SuspendCount {
+                    thread: wire::id(thread),
+                    count,
+                })
+            }
+            Command::Array { command, .. } => self.array(command).await,
+            Command::Suspend { thread, all, .. } => self.suspend(thread, all).await,
             Command::Ddm { command, .. } => self.ddm(command).await,
             Command::Ui { command, .. } => return self.ui(command).await,
             Command::Class { command, .. } => self.class(command).await,

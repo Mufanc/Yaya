@@ -100,3 +100,12 @@ impl Response for MatchingClass {
         })
     }
 }
+
+pub struct Suspend;
+
+impl Command for Suspend {
+    type Response = ();
+
+    const COMMAND_SET: u8 = self::COMMAND_SET;
+    const COMMAND: u8 = 8;
+}

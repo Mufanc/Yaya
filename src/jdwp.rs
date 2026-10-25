@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod protocol_tests;
 
+pub mod array_reference;
 pub mod class_type;
 pub mod ddm;
 pub mod event_request;
@@ -8,6 +9,7 @@ pub mod location;
 pub mod object_reference;
 pub mod reference_type;
 pub mod stack_frame;
+pub mod string_reference;
 pub mod thread_reference;
 pub mod value;
 pub mod virtual_machine;
