@@ -1,9 +1,13 @@
 use anyhow::{Context, bail, ensure};
 
 use crate::cli::Break;
-use crate::jdwp::event_request::{EventKind, Modifier, StepDepth, StepSize, SuspendPolicy};
+use crate::jdwp::Failure;
+use crate::jdwp::event_request::{
+    Clear, ClearAllBreakpoints, EventKind, Modifier, Set, StepDepth, StepSize, SuspendPolicy,
+};
 use crate::jdwp::location::Location;
-use crate::jdwp::{Failure, event_request, thread_reference, virtual_machine};
+use crate::jdwp::thread_reference::{Name, Resume as ResumeThread, Status};
+use crate::jdwp::virtual_machine::{AllThreads, Resume as ResumeVm};
 use crate::wire;
 
 use super::Core;
@@ -39,7 +43,7 @@ impl Core {
                 };
                 let request_id = self
                     .client
-                    .request(event_request::Set {
+                    .request(Set {
                         kind: EventKind::Breakpoint,
                         suspend_policy,
                         modifiers: vec![Modifier::LocationOnly(Location {
@@ -59,7 +63,7 @@ impl Core {
 
             Break::Remove { id } => {
                 self.client
-                    .request(event_request::Clear {
+                    .request(Clear {
                         kind: EventKind::Breakpoint,
                         request_id: id,
                     })
@@ -69,9 +73,7 @@ impl Core {
             }
 
             Break::Clear => {
-                self.client
-                    .request(event_request::ClearAllBreakpoints)
-                    .await?;
+                self.client.request(ClearAllBreakpoints).await?;
 
                 Ok(super::confirmed("clear_all_breakpoints"))
             }
@@ -79,19 +81,13 @@ impl Core {
     }
 
     pub(super) async fn threads(&self) -> anyhow::Result<Data> {
-        let thread_ids = self.client.request(virtual_machine::AllThreads).await?;
+        let thread_ids = self.client.request(AllThreads).await?;
         let mut threads = Vec::new();
 
         for thread_id in thread_ids {
             let thread = thread_id.0;
-            let name = self
-                .client
-                .request(thread_reference::Name { thread })
-                .await?;
-            let state = self
-                .client
-                .request(thread_reference::Status { thread })
-                .await?;
+            let name = self.client.request(Name { thread }).await?;
+            let state = self.client.request(Status { thread }).await?;
 
             threads.push(ThreadInfo {
                 thread: wire::id(thread),
@@ -125,7 +121,7 @@ impl Core {
         };
         let request_id = self
             .client
-            .request(event_request::Set {
+            .request(Set {
                 kind: EventKind::SingleStep,
                 suspend_policy: SuspendPolicy::EventThread,
                 modifiers: vec![
@@ -139,11 +135,7 @@ impl Core {
             })
             .await?;
 
-        if let Err(error) = self
-            .client
-            .request(thread_reference::Resume { thread })
-            .await
-        {
+        if let Err(error) = self.client.request(ResumeThread { thread }).await {
             let mut failure = Failure::from_error(&error);
 
             failure.event_request_id = Some(request_id);
@@ -165,11 +157,9 @@ impl Core {
         ensure!(thread.is_some() != all, "choose thread or all");
 
         if let Some(thread) = thread {
-            self.client
-                .request(thread_reference::Resume { thread })
-                .await?;
+            self.client.request(ResumeThread { thread }).await?;
         } else {
-            self.client.request(virtual_machine::Resume).await?;
+            self.client.request(ResumeVm).await?;
         }
 
         Ok(super::confirmed("resume_once"))

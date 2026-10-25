@@ -1,0 +1,4 @@
+Example:
+  yaya ui windows -s s_k7m2px
+
+Sends VULW and returns ViewRoot names owned by the attached process. Pass an exact returned name to --window/-w; quote shell-sensitive names. This is not a system-wide window list. Names may become invalid as windows are replaced; query again after a target error.

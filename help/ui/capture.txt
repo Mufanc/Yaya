@@ -1,0 +1,5 @@
+Examples:
+  yaya ui capture -w '<window>' -v 'android.widget.TextView@abc123' -o title.png -s s_k7m2px
+  yaya ui capture -w '<window>' -v 'com.example:id/title' -o title.png -s s_k7m2px
+
+Sends VUOP capture with an explicit window and View. Use a view selector returned by ui dump, or a fully qualified resource name. To capture the root, pass the root node selector. The target redraws the View on its UI thread and returns PNG bytes; this is not a screenshot of the composed screen and may omit independent surfaces. Android may return a 1x1 fallback image on capture failure; a valid PNG alone does not prove meaningful content. The client saves the file relative to its working directory (also in interactive mode); the parent directory must exist and existing files are never overwritten. JSONL returns type=file_saved, the absolute path and byte count, never image bytes. File errors do not retry the target request.

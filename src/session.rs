@@ -1,11 +1,13 @@
 pub mod client;
 pub mod daemon;
+mod file;
 pub mod interactive;
 mod protocol;
 pub mod server;
 pub mod transport;
 
 use std::fs::{self, DirBuilder};
+use std::io::ErrorKind;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::path::PathBuf;
 
@@ -40,7 +42,7 @@ fn root() -> anyhow::Result<PathBuf> {
 
     match DirBuilder::new().mode(0o700).create(&path) {
         Ok(()) => (),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => (),
         Err(error) => return Err(error.into()),
     }
 
@@ -105,7 +107,7 @@ fn allocate() -> anyhow::Result<(String, Cleanup)> {
 
         match DirBuilder::new().mode(0o700).create(&path) {
             Ok(()) => return Ok((id, Cleanup(path))),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error.into()),
         }
     }

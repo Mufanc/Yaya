@@ -11,7 +11,8 @@ It complements [apkq](https://github.com/Mufanc/apkq): apkq explains what is in 
 - **Inspect execution state.** List threads, inspect call stacks, and read or write explicitly typed registers in suspended frames.
 - **Control execution.** Step into, over or out of methods, then resume a thread or the whole VM. Stepping returns after registration and resume; events report what actually happens next.
 - **Observe debugging events.** Drain queued events, wait for the next batch, or collect events for a duration.
-- **Access the underlying protocol.** Send raw JDWP requests through the same connection and event queue when a higher-level command is not enough.
+- **Inspect the interface.** Enumerate process windows, inspect fresh View hierarchies and exported properties, and capture a selected View as a local PNG through Android DDM.
+- **Access the underlying protocol.** Query DDM features or send raw JDWP requests and DDM chunks through the same connection and event queue when a higher-level command is not enough.
 
 ## Designed for agent workflows
 

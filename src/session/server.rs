@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, ensure};
+use clap::Args;
+use tokio::sync::watch::{Receiver, Sender};
 use tokio::sync::{Mutex, Semaphore, watch};
 use tokio::time;
 
@@ -18,7 +20,7 @@ pub struct Server {
     client: Arc<JdwpClient>,
     session: String,
     active: Semaphore,
-    stop: watch::Sender<bool>,
+    stop: Sender<bool>,
 }
 
 impl Server {
@@ -34,11 +36,11 @@ impl Server {
         })
     }
 
-    pub fn stopped(&self) -> watch::Receiver<bool> {
+    pub fn stopped(&self) -> Receiver<bool> {
         self.stop.subscribe()
     }
 
-    pub async fn reject<S: clap::Args, T>(mut connection: T)
+    pub async fn reject<S: Args, T>(mut connection: T)
     where
         T: Transport<Incoming = ClientMessage<S>, Outgoing = ServerMessage>,
     {
@@ -55,7 +57,7 @@ impl Server {
 
     pub async fn serve<S, T>(self: Arc<Self>, mut connection: T) -> anyhow::Result<()>
     where
-        S: clap::Args + Send + 'static,
+        S: Args + Send + 'static,
         T: Transport<Incoming = ClientMessage<S>, Outgoing = ServerMessage>,
     {
         let Ok(_permit) = self.active.try_acquire() else {
@@ -115,7 +117,7 @@ impl Server {
                     _ = connection.receive() => return Ok(()),
                 };
                 let response = match result {
-                    Ok(data) => ServerMessage::Result { data },
+                    Ok(result) => ServerMessage::Result { result },
                     Err(error) => ServerMessage::Error {
                         error: Failure::from_error(&error),
                     },

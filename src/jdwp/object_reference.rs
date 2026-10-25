@@ -1,3 +1,5 @@
+use anyhow::ensure;
+
 use crate::wire::{IdSizes, Reader, Writer};
 
 use super::value::Value;
@@ -56,7 +58,7 @@ impl Command for GetValues {
     ) -> anyhow::Result<Self::Response> {
         let values = Self::Response::decode(reader, sizes)?;
 
-        anyhow::ensure!(
+        ensure!(
             values.len() == self.fields.len(),
             "field reply count mismatch"
         );

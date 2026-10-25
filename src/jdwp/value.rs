@@ -1,5 +1,6 @@
+use anyhow::{Error, bail};
+
 use super::Response;
-use anyhow::bail;
 
 use crate::wire::{self, IdSizes, Reader, Writer};
 
@@ -37,7 +38,7 @@ impl Value {
                 id: if text == "null" {
                     0
                 } else {
-                    wire::number(text).map_err(anyhow::Error::msg)?
+                    wire::number(text).map_err(Error::msg)?
                 },
             },
             _ => bail!("unsupported write tag"),

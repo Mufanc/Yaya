@@ -4,12 +4,14 @@ pub use startup::Attach;
 
 use startup::Message;
 
-use std::fs;
+use std::fs::{self, Permissions};
 use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 
 use anyhow::{Context, ensure};
 use tokio::net::UnixListener;
+use tokio::signal::unix::{self, SignalKind};
+use tokio::task::JoinHandle;
 use tokio::time::{self, Instant};
 
 use crate::commands::Core;
@@ -31,7 +33,7 @@ async fn run(
         let path = super::socket_path(&id)?;
         let listener = UnixListener::bind(&path)?;
 
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+        fs::set_permissions(&path, Permissions::from_mode(0o600))?;
 
         let client = JdwpClient::connect(&host, port).await?;
         anyhow::Ok((listener, client))
@@ -77,10 +79,10 @@ async fn run(
     });
     let mut stopped = server.stopped();
     let mut disconnected = client.disconnected.subscribe();
-    let mut active: Option<tokio::task::JoinHandle<()>> = None;
+    let mut active: Option<JoinHandle<()>> = None;
     let mut idle_since = Instant::now();
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    let mut terminate = unix::signal(SignalKind::terminate())?;
+    let mut interrupt = unix::signal(SignalKind::interrupt())?;
 
     loop {
         if client.disconnected.borrow().is_some() || *stopped.borrow() {

@@ -1,16 +1,19 @@
+use std::path::Path;
 use std::time::Duration;
 
-use anyhow::{Context, ensure};
+use anyhow::{Context, bail, ensure};
+use clap::Args;
 use tokio::time::{self, Instant};
 
 use super::protocol::{ClientMessage, PROTOCOL, ServerMessage};
 use super::transport::{self, Transport};
 use crate::cli::Command;
+use crate::commands::CommandResult;
 use crate::events::{Delivery, Payload, SuspendPolicy};
 use crate::reporter::Reporter;
 
 pub async fn execute<
-    S: clap::Args,
+    S: Args,
     T: Transport<Outgoing = ClientMessage<S>, Incoming = ServerMessage>,
 >(
     connection: &mut T,
@@ -32,7 +35,7 @@ pub async fn execute<
                 "invalid server handshake"
             ),
             ServerMessage::Error { error } => return Err(error.into()),
-            _ => anyhow::bail!("invalid server handshake"),
+            _ => bail!("invalid server handshake"),
         }
 
         Ok(())
@@ -44,12 +47,27 @@ pub async fn execute<
         return events(connection, reporter, wait, collect).await;
     }
 
+    let output = command.output_path().map(Path::to_path_buf);
+
     connection.send(ClientMessage::Execute { command }).await?;
 
     match transport::receive(connection).await? {
-        ServerMessage::Result { data } => reporter.result(data)?,
+        ServerMessage::Result { result } => {
+            let data = match (result, output) {
+                (CommandResult::File { bytes }, Some(path)) => {
+                    super::file::save(&path, &bytes).await?
+                }
+                (CommandResult::File { .. }, None) => {
+                    bail!("file response without an output path")
+                }
+                (_, Some(_)) => bail!("expected a file response"),
+                (CommandResult::Data { data }, None) => data,
+            };
+
+            reporter.result(data)?;
+        }
         ServerMessage::Error { error } => return Err(error.into()),
-        _ => anyhow::bail!("unexpected command response"),
+        _ => bail!("unexpected command response"),
     }
 
     Ok("completed")
@@ -73,10 +91,7 @@ fn event_reason(
     None
 }
 
-async fn events<
-    S: clap::Args,
-    T: Transport<Outgoing = ClientMessage<S>, Incoming = ServerMessage>,
->(
+async fn events<S: Args, T: Transport<Outgoing = ClientMessage<S>, Incoming = ServerMessage>>(
     connection: &mut T,
     reporter: &mut Reporter,
     wait: Option<u64>,
@@ -102,7 +117,7 @@ async fn events<
                 ServerMessage::Delivery { delivery } => Some(delivery),
                 ServerMessage::Drained => None,
                 ServerMessage::Error { error } => return Err(error.into()),
-                _ => anyhow::bail!("unexpected event response"),
+                _ => bail!("unexpected event response"),
             },
         };
         let Some(delivery) = delivery else {

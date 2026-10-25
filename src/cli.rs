@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use clap::{Args as ClapArgs, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
@@ -18,7 +20,7 @@ macro_rules! help_text {
 #[command(
     version,
     about = "Inspect and control a running Android app through JDWP",
-    after_help = help_text!("yaya")
+    after_help = help_text!("index")
 )]
 pub struct Args {
     #[command(subcommand)]
@@ -193,6 +195,26 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[arg(short = 'c', long, value_parser = duration)]
         collect: Option<u64>,
     },
+    /// Query Android DDM capabilities or send a raw chunk.
+    #[command(after_help = help_text!("ddm/index"))]
+    Ddm {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: Ddm,
+    },
+    /// Inspect windows, View hierarchies and View images through DDM.
+    #[command(after_help = help_text!("ui/index"))]
+    Ui {
+        #[command(flatten)]
+        #[serde(skip)]
+        session: S,
+        #[command(subcommand)]
+        #[serde(flatten)]
+        command: Ui,
+    },
     /// Inspect ID widths or send a raw JDWP request.
     #[command(after_help = help_text!("jdwp/index"))]
     Jdwp {
@@ -203,6 +225,18 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[serde(flatten)]
         command: Jdwp,
     },
+}
+
+impl<S: ClapArgs> Command<S> {
+    pub fn output_path(&self) -> Option<&Path> {
+        match self {
+            Self::Ui {
+                command: Ui::Capture { output, .. },
+                ..
+            } => Some(output),
+            _ => None,
+        }
+    }
 }
 
 impl Command {
@@ -216,6 +250,8 @@ impl Command {
             | Self::Break { session, .. }
             | Self::Frame { session, .. }
             | Self::Jdwp { session, .. }
+            | Self::Ddm { session, .. }
+            | Self::Ui { session, .. }
             | Self::Stack { session, .. }
             | Self::Step { session, .. }
             | Self::Resume { session, .. }
@@ -374,6 +410,59 @@ pub enum Jdwp {
     },
 }
 
+#[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
+pub enum Ddm {
+    /// Query feature names advertised by the target; no capability cache.
+    #[command(after_help = help_text!("ddm/features"))]
+    Features,
+    /// Send one DDM chunk through the existing JDWP connection.
+    #[command(after_help = help_text!("ddm/raw"))]
+    Raw {
+        /// Exactly four ASCII characters, case-sensitive, e.g. VULW.
+        #[arg(value_parser = chunk_type)]
+        chunk: String,
+        /// Hex-encoded chunk payload; omit for an empty payload.
+        #[arg(value_name = "HEX", default_value = "")]
+        payload_hex: String,
+    },
+}
+
+#[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
+pub enum Ui {
+    /// List ViewRoot names in the attached process.
+    #[command(after_help = help_text!("ui/windows"))]
+    Windows,
+    /// Decode a fresh V2 View hierarchy, including exported properties.
+    #[command(after_help = help_text!("ui/dump"))]
+    Dump {
+        /// Exact window name returned by ui windows.
+        #[arg(short = 'w', long)]
+        window: String,
+    },
+    /// Redraw a View into a PNG saved by the client; requires the UI thread.
+    #[command(after_help = help_text!("ui/capture"))]
+    Capture {
+        /// Exact window name returned by ui windows.
+        #[arg(short = 'w', long)]
+        window: String,
+        /// Class@hexHash from ui dump, or a fully qualified resource name.
+        #[arg(short = 'v', long)]
+        view: String,
+        /// Client-local PNG path; parent must exist, existing files are refused.
+        #[arg(short = 'o', long)]
+        #[serde(skip)]
+        output: PathBuf,
+    },
+}
+
+fn chunk_type(value: &str) -> Result<String, String> {
+    if value.len() != 4 || !value.is_ascii() {
+        return Err("chunk must contain exactly four ASCII characters".into());
+    }
+
+    Ok(value.to_owned())
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CommandAddress {
     pub command_set: u8,
@@ -423,8 +512,7 @@ mod tests {
 
     #[test]
     fn help_examples_match_the_current_parser() {
-        let mut directories =
-            vec![std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("help")];
+        let mut directories = vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("help")];
         let mut checked = 0;
         while let Some(directory) = directories.pop() {
             for entry in std::fs::read_dir(directory).unwrap() {
@@ -451,6 +539,46 @@ mod tests {
             checked > 30,
             "expected external CLI examples throughout help"
         );
+    }
+
+    #[test]
+    fn ddm_and_ui_arguments_are_explicit_and_scoped() {
+        for args in [
+            vec!["ddm", "features"],
+            vec!["ddm", "raw", "VULW"],
+            vec!["ui", "windows"],
+            vec!["ui", "dump", "-w", "window"],
+            vec![
+                "ui", "capture", "-w", "window", "-v", "View@1", "-o", "out.png",
+            ],
+        ] {
+            assert!(
+                InteractiveArgs::try_parse_from(
+                    std::iter::once("yaya").chain(args.iter().copied())
+                )
+                .is_ok()
+            );
+            let parsed = Args::try_parse_from(
+                std::iter::once("yaya")
+                    .chain(args)
+                    .chain(["-s", "s_abc123"]),
+            )
+            .unwrap();
+            let EntryCommand::SessionCommand(command) = parsed.command else {
+                panic!()
+            };
+            assert_eq!(command.session(), Some("s_abc123"));
+        }
+        for args in [
+            vec!["ddm", "raw", "ABC"],
+            vec!["ddm", "raw", "ABCDE"],
+            vec!["ddm", "raw", "你好"],
+            vec!["ui", "dump"],
+            vec!["ui", "capture", "-w", "window", "-o", "out.png"],
+            vec!["ui", "capture", "-w", "window", "-v", "View@1"],
+        ] {
+            assert!(Args::try_parse_from(std::iter::once("yaya").chain(args)).is_err());
+        }
     }
 
     #[test]

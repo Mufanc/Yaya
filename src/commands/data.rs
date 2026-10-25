@@ -1,7 +1,12 @@
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::events::Location;
-use crate::wire::IdSizes;
+use crate::jdwp::ddm::Chunk;
+use crate::jdwp::ddm::hierarchy::Hierarchy;
+use crate::jdwp::value::Value as ProtocolValue;
+use crate::wire::{self, IdSizes};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Value {
@@ -52,6 +57,23 @@ pub struct FrameInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Data {
+    DdmFeatures {
+        features: Vec<String>,
+    },
+    DdmRaw {
+        chunks: Vec<Chunk>,
+    },
+    Windows {
+        windows: Vec<String>,
+    },
+    ViewHierarchy {
+        window: String,
+        hierarchy: Hierarchy,
+    },
+    FileSaved {
+        path: PathBuf,
+        bytes: usize,
+    },
     Attached {
         endpoint: String,
     },
@@ -95,17 +117,16 @@ pub enum Data {
     Raw {
         jdwp_request_id: u32,
         error_code: u16,
-        payload_hex: String,
+        #[serde(with = "wire::byte_payload")]
+        payload: Vec<u8>,
     },
     Sessions {
         sessions: Vec<String>,
     },
 }
 
-impl From<crate::jdwp::value::Value> for Value {
-    fn from(value: crate::jdwp::value::Value) -> Self {
-        use crate::jdwp::value::Value as ProtocolValue;
-
+impl From<ProtocolValue> for Value {
+    fn from(value: ProtocolValue) -> Self {
         let tag = value.tag();
         let value = match value {
             ProtocolValue::Boolean(value) => value.to_string(),
@@ -121,7 +142,7 @@ impl From<crate::jdwp::value::Value> for Value {
                 if id == 0 {
                     "null".into()
                 } else {
-                    crate::wire::id(id)
+                    wire::id(id)
                 }
             }
         };

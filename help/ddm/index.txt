@@ -1,0 +1,5 @@
+Examples:
+  yaya ddm features -s s_k7m2px
+  yaya ddm raw VULW -s s_k7m2px
+
+Android DDM uses the existing JDWP connection (199:1). Requests are sent directly, without capability caching, automatic retries or state repair. DDM FAIL reports code ddm_error and ddm_error_code; JDWP rejection remains jdwp_error. Unsolicited DDM packets remain available as unknown events through events.

@@ -2,6 +2,7 @@
 mod protocol_tests;
 
 pub mod class_type;
+pub mod ddm;
 pub mod event_request;
 pub mod location;
 pub mod object_reference;
@@ -12,18 +13,23 @@ pub mod value;
 pub mod virtual_machine;
 
 use std::collections::{HashMap, VecDeque};
+use std::error::Error as StdError;
+use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::{Context, ensure};
+use anyhow::{Context, Error, anyhow, ensure};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::oneshot::{self, Sender as ReplySender};
+use tokio::sync::watch::{self, Sender as DisconnectSender};
 use tokio::time;
 
+use self::virtual_machine::{Dispose, IdSizes as IdSizesRequest};
 use crate::events::{EventBatch, EventQueue};
 use crate::wire::{IdSizes, Reader, Writer};
 
@@ -101,7 +107,7 @@ impl Response for IdSizes {
     }
 }
 
-type Pending = Arc<Mutex<HashMap<u32, oneshot::Sender<Reply>>>>;
+type Pending = Arc<Mutex<HashMap<u32, ReplySender<Reply>>>>;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Reply {
@@ -118,6 +124,8 @@ pub struct Failure {
     pub jdwp_request_id: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ddm_error_code: Option<i32>,
     pub outcome: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_request_id: Option<u32>,
@@ -131,13 +139,13 @@ pub struct TypeCandidate {
     pub class_loader_id: String,
 }
 
-impl std::fmt::Display for Failure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for Failure {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         write!(formatter, "{}: {}", self.code, self.message)
     }
 }
 
-impl std::error::Error for Failure {}
+impl StdError for Failure {}
 
 impl Failure {
     pub fn new(code: &str, message: impl Into<String>) -> Self {
@@ -146,13 +154,14 @@ impl Failure {
             message: message.into(),
             jdwp_request_id: None,
             error_code: None,
+            ddm_error_code: None,
             outcome: "not_submitted".into(),
             event_request_id: None,
             candidates: vec![],
         }
     }
 
-    pub fn from_error(error: &anyhow::Error) -> Self {
+    pub fn from_error(error: &Error) -> Self {
         if let Some(failure) = error.downcast_ref::<Self>() {
             let mut failure = failure.clone();
 
@@ -175,12 +184,12 @@ impl Failure {
 }
 
 pub struct JdwpClient {
-    writer: tokio::sync::Mutex<OwnedWriteHalf>,
+    writer: AsyncMutex<OwnedWriteHalf>,
     pending: Pending,
     next_id: AtomicU32,
     pub sizes: IdSizes,
     pub queue: Arc<Mutex<EventQueue>>,
-    pub disconnected: watch::Sender<Option<String>>,
+    pub disconnected: DisconnectSender<Option<String>>,
     pub endpoint: String,
 }
 
@@ -217,11 +226,7 @@ impl JdwpClient {
         let mut header = Vec::from(11u32.to_be_bytes());
 
         header.extend(1u32.to_be_bytes());
-        header.extend([
-            0,
-            virtual_machine::IdSizes::COMMAND_SET,
-            virtual_machine::IdSizes::COMMAND,
-        ]);
+        header.extend([0, IdSizesRequest::COMMAND_SET, IdSizesRequest::COMMAND]);
         stream.write_all(&header).await?;
 
         let (mut reader, writer) = stream.into_split();
@@ -283,7 +288,7 @@ impl JdwpClient {
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let (disconnected, _) = watch::channel(None);
         let client = Arc::new(Self {
-            writer: tokio::sync::Mutex::new(writer),
+            writer: AsyncMutex::new(writer),
             pending: pending.clone(),
             next_id: AtomicU32::new(2),
             sizes,
@@ -322,7 +327,7 @@ impl JdwpClient {
         let id = self
             .next_id
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
-            .map_err(|_| anyhow::anyhow!("JDWP request IDs exhausted; attach again"))?;
+            .map_err(|_| anyhow!("JDWP request IDs exhausted; attach again"))?;
         let (sender, receiver) = oneshot::channel();
         let mut bytes = Vec::with_capacity(payload.len() + 11);
 
@@ -348,6 +353,7 @@ impl JdwpClient {
                 message: "JDWP write failed or timed out; connection cannot be reused".into(),
                 jdwp_request_id: Some(id),
                 error_code: None,
+                ddm_error_code: None,
                 outcome: "unknown".into(),
                 event_request_id: None,
                 candidates: vec![],
@@ -374,6 +380,7 @@ impl JdwpClient {
                     message: error.to_string(),
                     jdwp_request_id: Some(id),
                     error_code: None,
+                    ddm_error_code: None,
                     outcome: "unknown".into(),
                     event_request_id: None,
                     candidates: vec![],
@@ -385,6 +392,7 @@ impl JdwpClient {
                 message: "response not confirmed; do not automatically retry".into(),
                 jdwp_request_id: Some(id),
                 error_code: None,
+                ddm_error_code: None,
                 outcome: "unknown".into(),
                 event_request_id: None,
                 candidates: vec![],
@@ -413,6 +421,7 @@ impl JdwpClient {
                 ),
                 jdwp_request_id: Some(reply.jdwp_request_id),
                 error_code: Some(reply.error_code),
+                ddm_error_code: None,
                 outcome: "rejected".into(),
                 event_request_id: None,
                 candidates: vec![],
@@ -429,11 +438,7 @@ impl JdwpClient {
     }
 
     pub async fn close(&self) {
-        let _ = time::timeout(
-            Duration::from_secs(2),
-            self.request(virtual_machine::Dispose),
-        )
-        .await;
+        let _ = time::timeout(Duration::from_secs(2), self.request(Dispose)).await;
 
         self.disconnected
             .send_replace(Some("session closed".into()));
@@ -519,7 +524,7 @@ mod tests {
         failure.error_code = Some(13);
         failure.jdwp_request_id = Some(42);
         failure.outcome = "rejected".into();
-        let error = anyhow::Error::new(failure).context("read stack");
+        let error = Error::new(failure).context("read stack");
         let forwarded = Failure::from_error(&error);
         assert_eq!(forwarded.message, "read stack: JDWP 11/6 returned 13");
         let encoded = serde_json::to_string(&forwarded).unwrap();

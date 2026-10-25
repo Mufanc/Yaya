@@ -1,9 +1,9 @@
-use anyhow::{Context, ensure};
+use anyhow::{Context, Error, ensure};
 
 use crate::cli::Frame;
-use crate::jdwp::stack_frame::Slot;
+use crate::jdwp::stack_frame::{GetValues, SetValues, Slot};
+use crate::jdwp::thread_reference::Frames;
 use crate::jdwp::value::Value;
-use crate::jdwp::{stack_frame, thread_reference};
 use crate::wire;
 
 use super::Core;
@@ -27,14 +27,14 @@ impl Core {
 
                     slots.push(Slot {
                         index: slot(name)?,
-                        tag: wire::value_tag(kind).map_err(anyhow::Error::msg)?,
+                        tag: wire::value_tag(kind).map_err(Error::msg)?,
                     });
                     names.push(name.to_owned());
                 }
 
                 let values = self
                     .client
-                    .request(stack_frame::GetValues {
+                    .request(GetValues {
                         thread,
                         frame,
                         slots,
@@ -56,7 +56,7 @@ impl Core {
                 tag,
                 value,
             } => {
-                let request = stack_frame::SetValues {
+                let request = SetValues {
                     thread,
                     frame,
                     slots: vec![(slot(&register)?, Value::parse(tag, &value)?)],
@@ -72,7 +72,7 @@ impl Core {
     pub(super) async fn stack(&self, thread: u64) -> anyhow::Result<Data> {
         let frames = self
             .client
-            .request(thread_reference::Frames {
+            .request(Frames {
                 thread,
                 start: 0,
                 length: -1,

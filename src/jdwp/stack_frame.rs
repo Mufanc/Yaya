@@ -1,3 +1,5 @@
+use anyhow::ensure;
+
 use crate::wire::{IdSizes, Reader, Writer};
 
 use super::value::Value;
@@ -28,7 +30,7 @@ impl Command for GetValues {
         writer.write_count(self.slots.len())?;
 
         for slot in &self.slots {
-            anyhow::ensure!(
+            ensure!(
                 slot.index <= i32::MAX as u32,
                 "slot exceeds signed JDWP integer"
             );
@@ -46,7 +48,7 @@ impl Command for GetValues {
     ) -> anyhow::Result<Self::Response> {
         let values = Self::Response::decode(reader, sizes)?;
 
-        anyhow::ensure!(
+        ensure!(
             values.len() == self.slots.len(),
             "register reply count mismatch"
         );
@@ -73,7 +75,7 @@ impl Command for SetValues {
         writer.write_count(self.slots.len())?;
 
         for (slot, value) in &self.slots {
-            anyhow::ensure!(*slot <= i32::MAX as u32, "slot exceeds signed JDWP integer");
+            ensure!(*slot <= i32::MAX as u32, "slot exceeds signed JDWP integer");
             writer.write_i32((*slot).try_into()?);
             writer.write_u8(value.tag());
             value.write_untagged(writer, sizes)?;

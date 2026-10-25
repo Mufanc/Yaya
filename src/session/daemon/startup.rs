@@ -4,6 +4,7 @@ use std::time::Duration;
 use anyhow::{Context, bail, ensure};
 use daemonize::{Daemonize, Outcome};
 use serde::{Deserialize, Serialize};
+use tokio::net::UnixStream as AsyncUnixStream;
 use tokio::time;
 
 use crate::commands::Data;
@@ -70,7 +71,7 @@ impl Attach {
             reporter.set_session(&id);
 
             let result = async {
-                let socket = tokio::net::UnixStream::from_std(socket)?;
+                let socket = AsyncUnixStream::from_std(socket)?;
                 let mut channel = Socket::new(socket);
                 let message = time::timeout(Duration::from_secs(50), channel.receive())
                     .await
@@ -95,7 +96,7 @@ impl Attach {
 
             reporter.finish(result)
         } else {
-            let socket = tokio::net::UnixStream::from_std(socket)?;
+            let socket = AsyncUnixStream::from_std(socket)?;
             let channel = Socket::new(socket);
             let result = super::run(id, host, port, channel).await;
 

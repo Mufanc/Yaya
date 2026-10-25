@@ -1,18 +1,34 @@
 mod class;
 mod data;
+mod ddm;
 mod execution;
 mod frame;
 mod object;
 
 use std::sync::Arc;
 
-use anyhow::bail;
+use anyhow::{Error, bail};
+use clap::Args as ClapArgs;
+use serde::{Deserialize, Serialize};
 
 use crate::cli::{Command, Jdwp};
-use crate::jdwp::{JdwpClient, virtual_machine};
+use crate::jdwp::JdwpClient;
+use crate::jdwp::virtual_machine::Dispose;
 use crate::wire;
 
 pub use data::Data;
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CommandResult {
+    Data {
+        data: Data,
+    },
+    File {
+        #[serde(with = "wire::byte_payload")]
+        bytes: Vec<u8>,
+    },
+}
 
 pub struct Core {
     pub client: Arc<JdwpClient>,
@@ -20,11 +36,11 @@ pub struct Core {
 }
 
 impl Core {
-    pub async fn execute<S: clap::Args>(&self, command: Command<S>) -> anyhow::Result<Data> {
+    pub async fn execute<S: ClapArgs>(&self, command: Command<S>) -> anyhow::Result<CommandResult> {
         let client = &self.client;
         let sizes = client.sizes;
 
-        match command {
+        let data = match command {
             Command::Status { .. } => {
                 let queue = client.queue.lock().unwrap();
 
@@ -37,7 +53,7 @@ impl Core {
             }
 
             Command::Detach { .. } => {
-                client.request(virtual_machine::Dispose).await?;
+                client.request(Dispose).await?;
 
                 Ok(confirmed("dispose"))
             }
@@ -62,10 +78,12 @@ impl Core {
                 Ok(Data::Raw {
                     jdwp_request_id: reply.jdwp_request_id,
                     error_code: reply.error_code,
-                    payload_hex: wire::hex(&reply.payload),
+                    payload: reply.payload,
                 })
             }
 
+            Command::Ddm { command, .. } => self.ddm(command).await,
+            Command::Ui { command, .. } => return self.ui(command).await,
             Command::Class { command, .. } => self.class(command).await,
             Command::Object { command, .. } => self.object(command).await,
             Command::Break { command, .. } => self.breakpoint(command).await,
@@ -81,12 +99,14 @@ impl Core {
             } => self.step(thread, into, over, out).await,
             Command::Resume { thread, all, .. } => self.resume(thread, all).await,
             _ => bail!("command is not valid on an attached session"),
-        }
+        }?;
+
+        Ok(CommandResult::Data { data })
     }
 }
 
 fn parse_id(value: &str) -> anyhow::Result<u64> {
-    wire::number(value).map_err(anyhow::Error::msg)
+    wire::number(value).map_err(Error::msg)
 }
 
 fn confirmed(operation: &str) -> Data {

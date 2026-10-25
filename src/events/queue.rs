@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use anyhow::ensure;
 use tokio::sync::Notify;
@@ -20,7 +21,7 @@ pub struct EventQueue {
     next_arrival: u64,
     next_sequence: u64,
     pending: Option<(u64, Delivery)>,
-    pub changed: std::sync::Arc<Notify>,
+    pub changed: Arc<Notify>,
 }
 
 impl EventQueue {
@@ -34,7 +35,7 @@ impl EventQueue {
             next_arrival: 0,
             next_sequence: 0,
             pending: None,
-            changed: std::sync::Arc::new(Notify::new()),
+            changed: Arc::new(Notify::new()),
         }
     }
 

@@ -1,3 +1,5 @@
+pub mod byte_payload;
+
 use anyhow::ensure;
 use serde::{Deserialize, Serialize};
 
@@ -39,6 +41,10 @@ pub struct Reader<'a> {
 impl<'a> Reader<'a> {
     pub fn new(bytes: &'a [u8]) -> Self {
         Self { bytes }
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.bytes.len()
     }
 
     pub fn read_bytes(&mut self, length: usize) -> anyhow::Result<&'a [u8]> {
@@ -281,18 +287,5 @@ mod tests {
             u64::MAX
         );
         assert_eq!(number("0x19").unwrap(), 25);
-    }
-}
-
-pub mod hex_bytes {
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&super::hex(bytes))
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        super::unhex(&value).map_err(serde::de::Error::custom)
     }
 }

@@ -1,0 +1,4 @@
+Example:
+  yaya ddm features -s s_k7m2px
+
+Sends FEAT with an empty payload and returns feature names advertised by the target. This is a live query, not a guarantee that every advertised operation works in the current state. No feature list is cached or used to block raw requests.

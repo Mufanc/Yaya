@@ -1,14 +1,18 @@
+use crate::commands::Data;
 use crate::wire::{self, IdSizes, Reader, Writer};
 
-use super::event_request::{EventKind, Modifier, StepDepth, StepSize, SuspendPolicy};
-use super::location::Location;
-use super::stack_frame::Slot;
-use super::value::Value;
-use super::{Command, Response};
-use super::{
-    class_type, event_request, object_reference, reference_type, stack_frame, thread_reference,
-    virtual_machine,
+use super::class_type::{SetValues as SetClassValues, Superclass};
+use super::event_request::{
+    Clear as ClearEvent, EventKind, Modifier, Set as SetEvent, StepDepth, StepSize, SuspendPolicy,
 };
+use super::location::Location;
+use super::object_reference::{GetValues as GetObjectValues, SetValues as SetObjectValues};
+use super::reference_type::{ClassLoader, Fields, GetValues as GetStaticValues, Methods};
+use super::stack_frame::{GetValues as GetFrameValues, SetValues as SetFrameValues, Slot};
+use super::thread_reference::Frames;
+use super::value::Value;
+use super::virtual_machine::{AllClasses, AllThreads, Dispose};
+use super::{Command, Response};
 
 const SIZES: IdSizes = IdSizes {
     field: 2,
@@ -33,7 +37,7 @@ fn decoded<T: Command>(request: T, bytes: &[u8]) -> anyhow::Result<T::Response> 
 
 #[test]
 fn request_bytes_preserve_id_widths_and_value_tag_rules() {
-    let get = stack_frame::GetValues {
+    let get = GetFrameValues {
         thread: 0x12,
         frame: 0x22,
         slots: vec![Slot {
@@ -50,7 +54,7 @@ fn request_bytes_preserve_id_widths_and_value_tag_rules() {
         )
         .unwrap()
     );
-    let set = stack_frame::SetValues {
+    let set = SetFrameValues {
         thread: 0x12,
         frame: 0x22,
         slots: vec![(2, Value::Int(-7))],
@@ -59,7 +63,7 @@ fn request_bytes_preserve_id_widths_and_value_tag_rules() {
         encoded(set),
         wire::unhex("000000120000000000000022000000010000000249fffffff9").unwrap()
     );
-    let set = object_reference::SetValues {
+    let set = SetObjectValues {
         object: 0x12,
         fields: vec![(0x33, Value::Int(-7))],
     };
@@ -67,7 +71,7 @@ fn request_bytes_preserve_id_widths_and_value_tag_rules() {
         encoded(set),
         wire::unhex("00000012000000010033fffffff9").unwrap()
     );
-    let set = class_type::SetValues {
+    let set = SetClassValues {
         class: 0x12,
         fields: vec![(
             0x33,
@@ -81,7 +85,7 @@ fn request_bytes_preserve_id_widths_and_value_tag_rules() {
         encoded(set),
         wire::unhex("001200000001003300000044").unwrap()
     );
-    let frames = thread_reference::Frames {
+    let frames = Frames {
         thread: 0x12,
         start: 0,
         length: -1,
@@ -91,7 +95,7 @@ fn request_bytes_preserve_id_widths_and_value_tag_rules() {
         wire::unhex("0000001200000000ffffffff").unwrap()
     );
     assert!(
-        stack_frame::GetValues {
+        GetFrameValues {
             thread: u64::MAX,
             frame: 0,
             slots: vec![]
@@ -103,7 +107,7 @@ fn request_bytes_preserve_id_widths_and_value_tag_rules() {
 
 #[test]
 fn event_modifiers_match_breakpoint_and_step_wire_format() {
-    let breakpoint = event_request::Set {
+    let breakpoint = SetEvent {
         kind: EventKind::Breakpoint,
         suspend_policy: SuspendPolicy::EventThread,
         modifiers: vec![Modifier::LocationOnly(Location {
@@ -122,7 +126,7 @@ fn event_modifiers_match_breakpoint_and_step_wire_format() {
         (StepDepth::Over, 1),
         (StepDepth::Out, 2),
     ] {
-        let step = event_request::Set {
+        let step = SetEvent {
             kind: EventKind::SingleStep,
             suspend_policy: SuspendPolicy::EventThread,
             modifiers: vec![
@@ -139,7 +143,7 @@ fn event_modifiers_match_breakpoint_and_step_wire_format() {
         assert_eq!(encoded(step), expected);
     }
     assert_eq!(
-        encoded(event_request::Clear {
+        encoded(ClearEvent {
             kind: EventKind::Breakpoint,
             request_id: 77
         }),
@@ -150,7 +154,7 @@ fn event_modifiers_match_breakpoint_and_step_wire_format() {
 #[test]
 fn replies_keep_numeric_ids_and_reject_bad_payloads() {
     let classes = decoded(
-        virtual_machine::AllClasses,
+        AllClasses,
         &wire::unhex("00000001010101000000034c543b00000007").unwrap(),
     )
     .unwrap();
@@ -160,7 +164,7 @@ fn replies_keep_numeric_ids_and_reject_bad_payloads() {
     let frame_bytes =
         wire::unhex("000000010000000000000022010101000000820000000000000019").unwrap();
     let frames = decoded(
-        thread_reference::Frames {
+        Frames {
             thread: 0x12,
             start: 0,
             length: -1,
@@ -172,12 +176,12 @@ fn replies_keep_numeric_ids_and_reject_bad_payloads() {
     assert_eq!(frames[0].location.type_id, 0x101);
     assert_eq!(frames[0].location.method_id, 0x82);
     assert_eq!(frames[0].location.code_index, 0x19);
-    assert!(decoded(virtual_machine::AllClasses, &[0, 0, 0, 1]).is_err());
-    assert!(decoded(virtual_machine::AllThreads, &[0, 0, 0, 0, 1]).is_err());
-    assert!(decoded(virtual_machine::Dispose, &[1]).is_err());
+    assert!(decoded(AllClasses, &[0, 0, 0, 1]).is_err());
+    assert!(decoded(AllThreads, &[0, 0, 0, 0, 1]).is_err());
+    assert!(decoded(Dispose, &[1]).is_err());
     assert!(
         decoded(
-            reference_type::GetValues {
+            GetStaticValues {
                 type_id: 1,
                 fields: vec![2]
             },
@@ -187,7 +191,7 @@ fn replies_keep_numeric_ids_and_reject_bad_payloads() {
     );
     assert!(
         decoded(
-            stack_frame::GetValues {
+            GetFrameValues {
                 thread: 1,
                 frame: 2,
                 slots: vec![Slot {
@@ -201,7 +205,7 @@ fn replies_keep_numeric_ids_and_reject_bad_payloads() {
     );
     assert!(
         decoded(
-            object_reference::GetValues {
+            GetObjectValues {
                 object: 1,
                 fields: vec![2]
             },
@@ -233,7 +237,7 @@ fn primitive_values_preserve_encoding_and_display() {
         let mut tagged = vec![tag];
         tagged.extend(bytes);
         let value = Value::decode(&mut Reader::new(&tagged), SIZES).unwrap();
-        let output = crate::commands::Data::Objects {
+        let output = Data::Objects {
             objects: vec![value.into()],
         };
         let output = serde_json::to_value(output).unwrap();
@@ -247,23 +251,19 @@ fn primitive_values_preserve_encoding_and_display() {
 
 #[test]
 fn response_types_select_their_own_wire_layout() {
-    let object = decoded(
-        reference_type::ClassLoader { type_id: 1 },
-        &[0, 0, 0x12, 0x34],
-    )
-    .unwrap();
+    let object = decoded(ClassLoader { type_id: 1 }, &[0, 0, 0x12, 0x34]).unwrap();
     assert_eq!(object.0, 0x1234);
-    let parent = decoded(class_type::Superclass { class: 1 }, &[0x12, 0x34]).unwrap();
+    let parent = decoded(Superclass { class: 1 }, &[0x12, 0x34]).unwrap();
     assert_eq!(parent.0, 0x1234);
     let field_bytes = wire::unhex("0000000100330000000166000000014900000008").unwrap();
-    let fields = decoded(reference_type::Fields { type_id: 1 }, &field_bytes).unwrap();
+    let fields = decoded(Fields { type_id: 1 }, &field_bytes).unwrap();
     assert_eq!(fields.0[0].id, 0x33);
     assert_eq!(fields.0[0].name, "f");
     let method_bytes = wire::unhex("00000001000000330000000166000000014900000008").unwrap();
-    let methods = decoded(reference_type::Methods { type_id: 1 }, &method_bytes).unwrap();
+    let methods = decoded(Methods { type_id: 1 }, &method_bytes).unwrap();
     assert_eq!(methods.0[0].id, 0x33);
     assert_eq!(methods.0[0].modifiers, 8);
-    assert!(encoded(virtual_machine::Dispose).is_empty());
-    assert!(decoded(virtual_machine::Dispose, &[]).is_ok());
-    assert!(decoded(virtual_machine::Dispose, &[0]).is_err());
+    assert!(encoded(Dispose).is_empty());
+    assert!(decoded(Dispose, &[]).is_ok());
+    assert!(decoded(Dispose, &[0]).is_err());
 }

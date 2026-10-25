@@ -1,0 +1,6 @@
+Examples:
+  yaya ui windows -s s_k7m2px
+  yaya ui dump -w '<window>' -s s_k7m2px
+  yaya ui capture -w '<window>' -v '<class>@<hash>' -o view.png -s s_k7m2px
+
+Inspect the attached process through Android DDM. Window names and View selectors are passed to the target without local handle maps or caches. Always specify a window, even if there is only one. UI-thread operations may fail or time out while that thread is suspended; yaya never resumes it automatically.

@@ -1,0 +1,4 @@
+Example:
+  yaya ui dump -w '<window>' -s s_k7m2px
+
+Sends VURT dump hierarchy with V2 enabled, including children and exported properties. Returns window properties and a preorder nodes array: parent is the zero-based parent index (null for the root), view is the target class@hexHash selector, and properties retain exported property names and nested maps. parent indexes describe this response only, not runtime handles. No filtering or caching. Attributes depend on the target; Compose internals are not guaranteed. View selectors are not JDWP object IDs. Non-finite floats are strings; Android-truncated UTF-8 uses replacement characters. Malformed/incomplete V2 data fails rather than returning a partial tree; at most 128 nested maps are accepted. No legacy-format fallback.

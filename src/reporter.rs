@@ -1,4 +1,6 @@
-use std::io::{self, Write};
+use std::io::{self, Stdout, Write};
+
+use anyhow::anyhow;
 
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +52,7 @@ impl Record {
     }
 }
 
-pub struct Reporter<W: Write = io::Stdout> {
+pub struct Reporter<W: Write = Stdout> {
     session: Option<String>,
     writer: W,
     finished: bool,
@@ -90,7 +92,7 @@ impl<W: Write> Reporter<W> {
         let session = self
             .session
             .clone()
-            .ok_or_else(|| anyhow::anyhow!("event requires a session"))?;
+            .ok_or_else(|| anyhow!("event requires a session"))?;
 
         self.emit(Record::event(session, delivery))
     }
@@ -129,6 +131,10 @@ impl<W: Write> Drop for Reporter<W> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Error;
+
+    use serde_json::Value;
+
     use super::*;
 
     #[test]
@@ -141,12 +147,12 @@ mod tests {
                 finished: false,
             };
             let result = if failed {
-                Err(anyhow::anyhow!("test failure"))
+                Err(anyhow!("test failure"))
             } else {
                 Ok("timeout")
             };
             assert_eq!(reporter.finish(result).unwrap(), !failed);
-            let records: Vec<serde_json::Value> = String::from_utf8(buffer)
+            let records: Vec<Value> = String::from_utf8(buffer)
                 .unwrap()
                 .lines()
                 .map(|line| serde_json::from_str(line).unwrap())
@@ -171,7 +177,7 @@ mod tests {
                 Ok(buffer.len())
             }
             fn flush(&mut self) -> io::Result<()> {
-                Err(io::Error::other("flush failed"))
+                Err(Error::other("flush failed"))
             }
         }
         let mut reporter = Reporter {

@@ -1,9 +1,10 @@
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
-use std::process::{Command, Output, Stdio};
+use std::path::PathBuf;
+use std::process::{ChildStdout, Command, Output, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -14,7 +15,7 @@ use serde_json::{Value, json};
 type RecordedRequests = Arc<Mutex<Vec<(u8, u8, Vec<u8>)>>>;
 
 struct Fixture {
-    temp: std::path::PathBuf,
+    temp: PathBuf,
     port: u16,
     target: Arc<Mutex<Option<TcpStream>>>,
     requests: RecordedRequests,
@@ -67,7 +68,7 @@ impl Fixture {
         static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let temp = std::path::PathBuf::from(format!(
+        let temp = PathBuf::from(format!(
             "/tmp/yy-{}-{}-{}",
             std::process::id(),
             SystemTime::now()
@@ -182,6 +183,53 @@ impl Fixture {
                         stream.write_all(&packet(id, 0x80, 0, 0, &[])).unwrap();
                         break;
                     }
+                    (199, 1) => {
+                        assert!(body.len() >= 8);
+                        assert_eq!(
+                            u32::from_be_bytes(body[4..8].try_into().unwrap()) as usize,
+                            body.len() - 8
+                        );
+                        let chunk = &body[..4];
+                        let mut payload = Vec::new();
+                        let mut response_chunk = chunk;
+                        match chunk {
+                            b"FEAT" | b"VULW" => {
+                                payload.extend(1u32.to_be_bytes());
+                                let text = if chunk == b"FEAT" {
+                                    "view-hierarchy"
+                                } else {
+                                    "window"
+                                };
+                                payload.extend((text.len() as u32).to_be_bytes());
+                                for unit in text.encode_utf16() {
+                                    payload.extend(unit.to_be_bytes());
+                                }
+                            }
+                            b"VURT" => payload.extend(include_bytes!("fixtures/view-v2.bin")),
+                            b"VUOP" => {
+                                if body.ends_with(b"\0b\0a\0d") {
+                                    payload.extend(b"not a PNG");
+                                } else {
+                                    payload.extend(include_bytes!("fixtures/capture.png"));
+                                }
+                            }
+                            b"FAIL" => {
+                                payload.extend((-2i32).to_be_bytes());
+                                payload.extend(1u32.to_be_bytes());
+                                payload.extend([0, b'x']);
+                            }
+                            b"JDWE" => {
+                                error = 99;
+                                response_chunk = b"";
+                            }
+                            _ => response_chunk = b"",
+                        }
+                        if !response_chunk.is_empty() {
+                            reply.extend(response_chunk);
+                            reply.extend((payload.len() as u32).to_be_bytes());
+                            reply.extend(payload);
+                        }
+                    }
                     (100, 1) => {
                         thread::sleep(Duration::from_millis(150));
                         reply = body;
@@ -240,7 +288,7 @@ impl Fixture {
                 .unwrap();
             send(
                 &mut socket,
-                json!({"kind":"hello","version":4,"session":id}),
+                json!({"kind":"hello","version":8,"session":id}),
             );
             let response = recv(&mut socket);
             if response["kind"] == "ready" {
@@ -270,7 +318,7 @@ impl Drop for Fixture {
 }
 
 fn send(socket: &mut UnixStream, value: Value) {
-    let bytes = serde_json::to_vec(&value).unwrap();
+    let bytes = rmp_serde::to_vec_named(&value).unwrap();
     socket
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .unwrap();
@@ -282,7 +330,7 @@ fn recv(socket: &mut UnixStream) -> Value {
     socket.read_exact(&mut len).unwrap();
     let mut bytes = vec![0; u32::from_be_bytes(len) as usize];
     socket.read_exact(&mut bytes).unwrap();
-    serde_json::from_slice(&bytes).unwrap()
+    rmp_serde::from_slice(&bytes).unwrap()
 }
 
 #[test]
@@ -787,7 +835,7 @@ fn attach_failure_reports_error_and_removes_session() {
 #[test]
 fn daemon_cleans_up_when_attach_dies_during_startup() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let temp = std::path::PathBuf::from("/tmp").join(format!(
+    let temp = PathBuf::from("/tmp").join(format!(
         "yy-cancel-{}-{}",
         std::process::id(),
         SystemTime::now()
@@ -812,7 +860,7 @@ fn daemon_cleans_up_when_attach_dies_during_startup() {
     let (mut target, _) = loop {
         match listener.accept() {
             Ok(accepted) => break accepted,
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(error) if error.kind() == ErrorKind::WouldBlock => {
                 assert!(Instant::now() < deadline, "daemon did not connect");
                 thread::sleep(Duration::from_millis(10));
             }
@@ -971,7 +1019,7 @@ fn interactive_disconnect_during_wait_is_reported_once() {
         .unwrap();
     let mut input = child.stdin.take().unwrap();
     let mut reader = BufReader::new(child.stdout.take().unwrap());
-    let read_end = |reader: &mut BufReader<std::process::ChildStdout>| {
+    let read_end = |reader: &mut BufReader<ChildStdout>| {
         loop {
             let mut line = String::new();
             assert!(reader.read_line(&mut line).unwrap() > 0);
@@ -1017,4 +1065,135 @@ fn interactive_disconnect_during_wait_is_reported_once() {
     assert_eq!(rows[0]["error"]["code"], "disconnected");
     assert_eq!(rows[1]["kind"], "end");
     assert_eq!(rows[1]["ok"], false);
+}
+
+#[test]
+fn ddm_commands_share_socket_and_channel_paths() {
+    for interactive in [false, true] {
+        let fixture = Fixture::new();
+        fs::create_dir_all(&fixture.temp).unwrap();
+        let commands = [
+            vec!["ddm", "features"],
+            vec!["ddm", "raw", "VULW"],
+            vec!["ddm", "raw", "NONE"],
+            vec!["ddm", "raw", "FAIL"],
+            vec!["ddm", "raw", "JDWE"],
+            vec![
+                "ui", "capture", "-w", "window", "-v", "bad", "-o", "bad.png",
+            ],
+            vec!["ui", "windows"],
+            vec!["ui", "dump", "-w", "window"],
+            vec![
+                "ui",
+                "capture",
+                "-w",
+                "window",
+                "-v",
+                "android.widget.FrameLayout@123",
+                "-o",
+                "capture.png",
+            ],
+        ];
+        let records = if interactive {
+            let mut child = fixture
+                .command()
+                .current_dir(&fixture.temp)
+                .args(["attach", "-p", &fixture.port.to_string(), "-i"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap();
+            let mut stdin = child.stdin.take().unwrap();
+            for command in &commands {
+                writeln!(stdin, "{}", command.join(" ")).unwrap();
+            }
+            writeln!(stdin, "exit").unwrap();
+            drop(stdin);
+            let output = child.wait_with_output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str::<Value>(line).unwrap())
+                .collect::<Vec<_>>()
+        } else {
+            let session = fixture.attach();
+            let mut records = Vec::new();
+            for command in &commands {
+                let output = fixture
+                    .command()
+                    .current_dir(&fixture.temp)
+                    .args(command)
+                    .args(["-s", &session])
+                    .output()
+                    .unwrap();
+                records.extend(
+                    String::from_utf8(output.stdout)
+                        .unwrap()
+                        .lines()
+                        .map(|line| serde_json::from_str::<Value>(line).unwrap()),
+                );
+            }
+            assert!(fixture.run(&["detach", "-s", &session]).0.status.success());
+            records
+        };
+        assert!(
+            records
+                .iter()
+                .any(|row| row["data"]["features"][0] == "view-hierarchy")
+        );
+        assert!(records.iter().any(|row| row["data"]["chunks"] == json!([])));
+        assert!(
+            records
+                .iter()
+                .any(|row| row["error"]["ddm_error_code"] == -2)
+        );
+        assert!(records.iter().any(|row| row["error"]["code"] == "jdwp_error" && row["error"]["error_code"] == 99));
+        assert!(
+            records
+                .iter()
+                .any(|row| row["data"]["hierarchy"]["nodes"][1]["parent"] == 0)
+        );
+        assert!(records.iter().any(|row| {
+            row["data"]["path"]
+                == fixture
+                    .temp
+                    .canonicalize()
+                    .unwrap()
+                    .join("capture.png")
+                    .to_str()
+                    .unwrap()
+        }));
+        assert!(
+            !records
+                .iter()
+                .any(|row| row["data"]["type"] == "view_capture")
+        );
+        assert_eq!(
+            fs::read(fixture.temp.join("capture.png")).unwrap(),
+            include_bytes!("fixtures/capture.png")
+        );
+        assert!(!fixture.temp.join("bad.png").exists());
+        assert!(records.iter().any(|row| {
+            row["error"]["message"]
+                .as_str()
+                .is_some_and(|text| text.contains("did not return a PNG"))
+        }));
+        assert!(
+            records
+                .iter()
+                .any(|row| row["data"]["type"] == "file_saved")
+        );
+        let requests = fixture.requests.lock().unwrap();
+        let capture = requests
+            .iter()
+            .find(|(set, _, body)| *set == 199 && body.starts_with(b"VUOP"))
+            .unwrap();
+        assert!(!capture.2.windows(11).any(|bytes| bytes == b"capture.png"));
+    }
 }

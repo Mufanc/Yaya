@@ -1,8 +1,10 @@
 use anyhow::{Context, bail, ensure};
 
 use crate::cli::Object;
+use crate::jdwp::class_type::SetValues as SetStaticValues;
+use crate::jdwp::object_reference::{GetValues, ReferenceType, SetValues};
+use crate::jdwp::reference_type::{GetValues as GetStaticValues, Instances, STATIC_MODIFIER};
 use crate::jdwp::value::Value;
-use crate::jdwp::{class_type, object_reference, reference_type};
 use crate::wire;
 
 use super::Core;
@@ -24,7 +26,7 @@ impl Core {
                 let selected = self.resolve(&class, type_id).await?;
                 let objects = self
                     .client
-                    .request(reference_type::Instances {
+                    .request(Instances {
                         type_id: super::parse_id(&selected.type_id)?,
                         limit,
                     })
@@ -46,17 +48,15 @@ impl Core {
 
                 for field in selected {
                     let fields = vec![super::parse_id(&field.id)?];
-                    let mut result = if field.modifiers & reference_type::STATIC_MODIFIER != 0 {
+                    let mut result = if field.modifiers & STATIC_MODIFIER != 0 {
                         self.client
-                            .request(reference_type::GetValues {
+                            .request(GetStaticValues {
                                 type_id: super::parse_id(&field.declaring_type_id)?,
                                 fields,
                             })
                             .await?
                     } else {
-                        self.client
-                            .request(object_reference::GetValues { object, fields })
-                            .await?
+                        self.client.request(GetValues { object, fields }).await?
                     };
 
                     let value = result.pop().context("field reply count mismatch")?.into();
@@ -91,17 +91,15 @@ impl Core {
 
                 let fields = vec![(super::parse_id(&field.id)?, value)];
 
-                if field.modifiers & reference_type::STATIC_MODIFIER != 0 {
+                if field.modifiers & STATIC_MODIFIER != 0 {
                     self.client
-                        .request(class_type::SetValues {
+                        .request(SetStaticValues {
                             class: super::parse_id(&field.declaring_type_id)?,
                             fields,
                         })
                         .await?;
                 } else {
-                    self.client
-                        .request(object_reference::SetValues { object, fields })
-                        .await?;
+                    self.client.request(SetValues { object, fields }).await?;
                 }
 
                 Ok(super::confirmed("object_set"))
@@ -110,10 +108,7 @@ impl Core {
     }
 
     async fn object_fields(&self, object: u64) -> anyhow::Result<Vec<Member>> {
-        let object_type = self
-            .client
-            .request(object_reference::ReferenceType { object })
-            .await?;
+        let object_type = self.client.request(ReferenceType { object }).await?;
 
         self.fields(
             self.type_info(object_type.type_id, object_type.type_tag)

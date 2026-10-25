@@ -1,0 +1,5 @@
+Examples:
+  yaya ddm raw VULW -s s_k7m2px
+  yaya ddm raw HPGC -s s_k7m2px
+
+CHUNK is exactly four case-sensitive ASCII characters. HEX contains only the chunk payload, without the DDM or JDWP header; omit it for an empty payload. Hex parsing matches jdwp raw. yaya frames the request and returns chunks with chunk and payload; an empty reply is chunks: []. Some targets also return an empty reply for unknown chunk types; this does not prove the operation was supported. DDM FAIL is an execution error with its original signed code and message. No retries: raw commands can change the target, and timeout does not prove they were not executed. HPGC calls Runtime.gc(). Large replies remain subject to the 16 MiB JDWP packet limit.

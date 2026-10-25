@@ -17,4 +17,5 @@ tokio = { version = "1", features = ["full", "test-util"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 libc = "0.2"
 daemonize = "0.5"
-tokio-serde = { version = "0.9", features = ["json"] }
+tokio-serde = "0.9"
+rmp-serde = "1.3"

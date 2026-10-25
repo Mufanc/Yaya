@@ -3,7 +3,13 @@ use std::collections::HashSet;
 use anyhow::Context;
 
 use crate::cli::Class;
-use crate::jdwp::{Failure, TypeCandidate, class_type, reference_type, virtual_machine};
+use crate::jdwp::class_type::Superclass;
+use crate::jdwp::reference_type::{
+    CLASS_TAG, ClassLoader, Fields, INTERFACE_TAG, Interfaces, Member as ProtocolMember, Methods,
+    Signature,
+};
+use crate::jdwp::virtual_machine::{AllClasses, ClassesBySignature};
+use crate::jdwp::{Failure, TypeCandidate};
 use crate::wire;
 
 use super::Core;
@@ -13,7 +19,7 @@ impl Core {
     pub(super) async fn class(&self, command: Class) -> anyhow::Result<Data> {
         match command {
             Class::Find { pattern } => {
-                let classes = self.client.request(virtual_machine::AllClasses).await?;
+                let classes = self.client.request(AllClasses).await?;
                 let mut types = Vec::new();
 
                 for class in classes {
@@ -48,11 +54,7 @@ impl Core {
     }
 
     async fn loader(&self, type_id: u64) -> anyhow::Result<u64> {
-        Ok(self
-            .client
-            .request(reference_type::ClassLoader { type_id })
-            .await?
-            .0)
+        Ok(self.client.request(ClassLoader { type_id }).await?.0)
     }
 
     pub(super) async fn resolve(
@@ -62,7 +64,7 @@ impl Core {
     ) -> anyhow::Result<TypeInfo> {
         let classes = self
             .client
-            .request(virtual_machine::ClassesBySignature {
+            .request(ClassesBySignature {
                 signature: signature.into(),
             })
             .await?;
@@ -108,7 +110,7 @@ impl Core {
     pub(super) async fn methods(&self, selected: &TypeInfo) -> anyhow::Result<Vec<Member>> {
         let members = self
             .client
-            .request(reference_type::Methods {
+            .request(Methods {
                 type_id: super::parse_id(&selected.type_id)?,
             })
             .await?;
@@ -131,10 +133,7 @@ impl Core {
             }
 
             let type_id = super::parse_id(&selected.type_id)?;
-            let members = self
-                .client
-                .request(reference_type::Fields { type_id })
-                .await?;
+            let members = self.client.request(Fields { type_id }).await?;
 
             fields.extend(
                 members
@@ -143,27 +142,18 @@ impl Core {
                     .map(|member| member_output(member, &selected)),
             );
 
-            if selected.type_tag == reference_type::CLASS_TAG {
-                let parent = self
-                    .client
-                    .request(class_type::Superclass { class: type_id })
-                    .await?;
+            if selected.type_tag == CLASS_TAG {
+                let parent = self.client.request(Superclass { class: type_id }).await?;
 
                 if parent.0 != 0 {
-                    remaining.push(self.type_info(parent.0, reference_type::CLASS_TAG).await?);
+                    remaining.push(self.type_info(parent.0, CLASS_TAG).await?);
                 }
             }
 
-            let interfaces = self
-                .client
-                .request(reference_type::Interfaces { type_id })
-                .await?;
+            let interfaces = self.client.request(Interfaces { type_id }).await?;
 
             for interface in interfaces {
-                remaining.push(
-                    self.type_info(interface.0, reference_type::INTERFACE_TAG)
-                        .await?,
-                );
+                remaining.push(self.type_info(interface.0, INTERFACE_TAG).await?);
             }
         }
 
@@ -171,10 +161,7 @@ impl Core {
     }
 
     pub(super) async fn type_info(&self, type_id: u64, type_tag: u8) -> anyhow::Result<TypeInfo> {
-        let signature = self
-            .client
-            .request(reference_type::Signature { type_id })
-            .await?;
+        let signature = self.client.request(Signature { type_id }).await?;
 
         Ok(TypeInfo {
             type_tag,
@@ -186,7 +173,7 @@ impl Core {
     }
 }
 
-fn member_output(member: reference_type::Member, declaring: &TypeInfo) -> Member {
+fn member_output(member: ProtocolMember, declaring: &TypeInfo) -> Member {
     Member {
         id: wire::id(member.id),
         name: member.name,

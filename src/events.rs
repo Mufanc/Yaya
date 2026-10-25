@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{bail, ensure};
 use serde::{Deserialize, Serialize};
 
+use crate::jdwp::location::Location as JdwpLocation;
 use crate::wire::{self, IdSizes, Reader};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -72,7 +73,7 @@ pub enum Event {
         packet_id: u32,
         command_set: u8,
         command: u8,
-        #[serde(with = "wire::hex_bytes", rename = "payload_hex")]
+        #[serde(with = "wire::byte_payload")]
         payload: Vec<u8>,
         diagnostic: String,
     },
@@ -212,13 +213,13 @@ pub struct Delivery {
     pub payload: Payload,
 }
 
-impl From<crate::jdwp::location::Location> for Location {
-    fn from(location: crate::jdwp::location::Location) -> Self {
+impl From<JdwpLocation> for Location {
+    fn from(location: JdwpLocation) -> Self {
         Self {
             type_tag: location.type_tag,
-            type_id: crate::wire::id(location.type_id),
-            method_id: crate::wire::id(location.method_id),
-            code_index: crate::wire::id(location.code_index),
+            type_id: wire::id(location.type_id),
+            method_id: wire::id(location.method_id),
+            code_index: wire::id(location.code_index),
         }
     }
 }
