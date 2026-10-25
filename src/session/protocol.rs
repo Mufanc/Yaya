@@ -6,7 +6,7 @@ use crate::commands::CommandResult;
 use crate::events::Delivery;
 use crate::jdwp::Failure;
 
-pub(super) const PROTOCOL: u32 = 8;
+pub(super) const PROTOCOL: u32 = 9;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

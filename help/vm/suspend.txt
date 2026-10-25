@@ -1,0 +1,4 @@
+Examples:
+  yaya vm suspend
+
+Sends one VirtualMachine.Suspend request. Does not query or mirror suspend counts, retry, or automatically balance other requests. Outside interactive mode, select a session using command options or YAYA_SESSION. Suspend counts accumulate; explicitly resume to release each suspension. Suspending the UI thread may prevent DDM dump/capture from completing.

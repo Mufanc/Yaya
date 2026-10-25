@@ -2,5 +2,5 @@ Examples:
   yaya frame get 0x0 -t 0x12 --registers v0:int,v2:object
   yaya frame set 0x0 -t 0x12 v0 --type int --value 85
 
-Outside interactive mode, select a session using command options or YAYA_SESSION. Copy frame and thread IDs from stack. JDWP requires a suspended thread. Get fresh frame IDs after resuming or stepping. vN is a direct alias for slot N on modern ART (tested on Android 16). Legacy ART may require an explicitly computed slotN. These are VM variable slots, not CPU registers.
+Outside interactive mode, select a session using command options or YAYA_SESSION. Copy frame and thread IDs from thread stack. JDWP requires a suspended thread. Get fresh frame IDs after resuming or stepping. vN is a direct alias for slot N on modern ART (tested on Android 16). Legacy ART may require an explicitly computed slotN. These are VM variable slots, not CPU registers.
 Use frame this to query the receiver directly with StackFrame.ThisObject.

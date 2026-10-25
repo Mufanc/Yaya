@@ -131,7 +131,7 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[serde(flatten)]
         command: StringCommand,
     },
-    /// Query an individual thread.
+    /// List threads, inspect stacks and control thread execution.
     #[command(after_help = help_text!("thread/index"))]
     Thread {
         #[command(flatten)]
@@ -151,23 +151,6 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[serde(flatten)]
         command: Break,
     },
-    /// List thread IDs, names, execution status and suspend status.
-    #[command(after_help = help_text!("threads"))]
-    Threads {
-        #[command(flatten)]
-        #[serde(skip)]
-        session: S,
-    },
-    /// Read a suspended thread's full call stack with thread and frame IDs.
-    #[command(after_help = help_text!("stack"))]
-    Stack {
-        #[command(flatten)]
-        #[serde(skip)]
-        session: S,
-        /// Thread ID from threads or an event (decimal or 0x).
-        #[arg(short = 't', long, value_parser = wire::number)]
-        thread: u64,
-    },
     /// Read or write registers in a suspended stack frame.
     #[command(after_help = help_text!("frame/index"))]
     Frame {
@@ -178,45 +161,15 @@ pub enum Command<S: ClapArgs = SessionArgs> {
         #[serde(flatten)]
         command: Frame,
     },
-    /// Register one instruction step and resume the thread; does not wait.
-    #[command(after_help = help_text!("step"))]
-    #[command(group(clap::ArgGroup::new("depth").required(true).args(["into", "over", "out"])))]
-    Step {
+    /// Suspend or resume the whole VM.
+    #[command(after_help = help_text!("vm/index"))]
+    Vm {
         #[command(flatten)]
         #[serde(skip)]
         session: S,
-        /// Thread ID from threads or an event (decimal or 0x).
-        #[arg(short = 't', long, value_parser = wire::number)]
-        thread: u64,
-        /// Step into a method call.
-        #[arg(long)]
-        into: bool,
-        /// Step over a method call.
-        #[arg(long)]
-        over: bool,
-        /// Run until this method returns to its caller.
-        #[arg(long)]
-        out: bool,
-    },
-    /// Send one thread or VM suspend request.
-    #[command(after_help = help_text!("suspend"))]
-    Suspend {
-        #[command(flatten)]
-        #[serde(skip)]
-        session: S,
-        #[command(flatten)]
+        #[command(subcommand)]
         #[serde(flatten)]
-        target: ExecutionTarget,
-    },
-    /// Send one thread or VM resume request.
-    #[command(after_help = help_text!("resume"))]
-    Resume {
-        #[command(flatten)]
-        #[serde(skip)]
-        session: S,
-        #[command(flatten)]
-        #[serde(flatten)]
-        target: ExecutionTarget,
+        command: Vm,
     },
     /// Drain buffered events, wait for a batch, or collect for a duration.
     #[command(after_help = help_text!("events"))]
@@ -280,21 +233,17 @@ impl Command {
         match self {
             Self::Status { session, .. }
             | Self::Detach { session, .. }
-            | Self::Threads { session, .. }
             | Self::Class { session, .. }
             | Self::Object { session, .. }
             | Self::Array { session, .. }
             | Self::String { session, .. }
             | Self::Thread { session, .. }
-            | Self::Suspend { session, .. }
+            | Self::Vm { session, .. }
             | Self::Break { session, .. }
             | Self::Frame { session, .. }
             | Self::Jdwp { session, .. }
             | Self::Ddm { session, .. }
             | Self::Ui { session, .. }
-            | Self::Stack { session, .. }
-            | Self::Step { session, .. }
-            | Self::Resume { session, .. }
             | Self::Events { session, .. } => session.session.as_deref(),
         }
     }
@@ -419,7 +368,7 @@ pub enum Frame {
     /// Read explicitly typed DEX registers or JDWP slots.
     #[command(after_help = help_text!("frame/get"))]
     Get {
-        /// Frame ID returned by stack (decimal or 0x); refresh after resume/step.
+        /// Frame ID returned by thread stack (decimal or 0x); refresh after resume/step.
         #[arg(value_parser = wire::number)]
         frame: u64,
         /// Thread ID belonging to this frame (decimal or 0x).
@@ -432,7 +381,7 @@ pub enum Frame {
     /// Write one typed register or slot directly; no read-back or undo.
     #[command(after_help = help_text!("frame/set"))]
     Set {
-        /// Frame ID returned by stack (decimal or 0x); refresh after resume/step.
+        /// Frame ID returned by thread stack (decimal or 0x); refresh after resume/step.
         #[arg(value_parser = wire::number)]
         frame: u64,
         /// Thread ID belonging to this frame (decimal or 0x).
@@ -575,6 +524,44 @@ pub enum StringCommand {
 
 #[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
 pub enum Thread {
+    /// List thread IDs, names, execution status and suspend status.
+    #[command(after_help = help_text!("thread/list"))]
+    List,
+    /// Read a suspended thread's full call stack.
+    #[command(after_help = help_text!("thread/stack"))]
+    Stack {
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: u64,
+    },
+    /// Register one instruction step and resume the thread; does not wait.
+    #[command(after_help = help_text!("thread/step"))]
+    #[command(group(clap::ArgGroup::new("depth").required(true).args(["into", "over", "out"])))]
+    Step {
+        /// Thread ID from thread list or an event (decimal or 0x).
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: u64,
+        /// Step into a method call.
+        #[arg(long)]
+        into: bool,
+        /// Step over a method call.
+        #[arg(long)]
+        over: bool,
+        /// Run until this method returns to its caller.
+        #[arg(long)]
+        out: bool,
+    },
+    /// Suspend one thread once.
+    #[command(after_help = help_text!("thread/suspend"))]
+    Suspend {
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: u64,
+    },
+    /// Resume one thread once.
+    #[command(after_help = help_text!("thread/resume"))]
+    Resume {
+        #[arg(short = 't', long, value_parser = wire::number)]
+        thread: u64,
+    },
     /// Query the VM's current suspend count; no locally maintained counter.
     #[command(after_help = help_text!("thread/suspend-count"))]
     SuspendCount {
@@ -583,15 +570,14 @@ pub enum Thread {
     },
 }
 
-#[derive(ClapArgs, Clone, Debug, Deserialize, Serialize)]
-#[group(id = "target", required = true, multiple = false)]
-pub struct ExecutionTarget {
-    /// Thread ID from threads or an event (decimal or 0x).
-    #[arg(short = 't', long, value_parser = wire::number)]
-    pub thread: Option<u64>,
-    /// Select the whole VM.
-    #[arg(short = 'a', long)]
-    pub all: bool,
+#[derive(Subcommand, Clone, Debug, Deserialize, Serialize)]
+pub enum Vm {
+    /// Send one VM-wide suspend request.
+    #[command(after_help = help_text!("vm/suspend"))]
+    Suspend,
+    /// Send one VM-wide resume request.
+    #[command(after_help = help_text!("vm/resume"))]
+    Resume,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -843,12 +829,12 @@ mod tests {
             vec!["attach", "-p", "8701"],
             vec!["sessions"],
             vec!["daemon"],
-            vec!["threads", "-s", "s_abc123"],
+            vec!["thread", "list", "-s", "s_abc123"],
             vec!["class", "find", "Card", "--session", "s_abc123"],
         ] {
             assert!(InteractiveArgs::try_parse_from(std::iter::once("yaya").chain(args)).is_err());
         }
-        assert!(InteractiveArgs::try_parse_from(["yaya", "threads"]).is_ok());
+        assert!(InteractiveArgs::try_parse_from(["yaya", "thread", "list"]).is_ok());
         assert!(InteractiveArgs::try_parse_from(["yaya", "exit"]).is_ok());
         assert!(Args::try_parse_from(["yaya", "exit"]).is_err());
 
@@ -872,7 +858,7 @@ mod tests {
     #[test]
     fn session_is_scoped_to_existing_session_commands() {
         for args in [
-            vec!["threads", "-s", "s_abc123"],
+            vec!["thread", "list", "-s", "s_abc123"],
             vec!["class", "-s", "s_abc123", "find", "Card"],
             vec!["class", "find", "Card", "--session", "s_abc123"],
             vec![
@@ -899,7 +885,7 @@ mod tests {
             assert_eq!(command.session(), Some("s_abc123"));
         }
         for args in [
-            vec!["-s", "s_abc123", "threads"],
+            vec!["-s", "s_abc123", "thread", "list"],
             vec!["attach", "-p", "8701", "-s", "s_abc123"],
             vec![
                 "attach",
@@ -931,30 +917,16 @@ mod tests {
     }
 
     #[test]
-    fn execution_targets_share_cli_rules_and_flat_wire_fields() {
-        for (name, variant) in [("suspend", "Suspend"), ("resume", "Resume")] {
-            for (target_args, thread, all) in [
-                (vec!["-t", "0x12"], Some(18u64), false),
-                (vec!["-a"], None, true),
-            ] {
-                let args =
-                    Args::try_parse_from(["yaya", name].into_iter().chain(target_args)).unwrap();
-                let EntryCommand::SessionCommand(command) = args.command else {
-                    panic!()
-                };
-                let encoded = serde_json::to_value(&command).unwrap();
-                assert_eq!(
-                    encoded[variant],
-                    serde_json::json!({"thread": thread, "all": all})
-                );
-                let decoded: Command = serde_json::from_value(encoded).unwrap();
-                assert_eq!(
-                    serde_json::to_value(decoded).unwrap(),
-                    serde_json::to_value(command).unwrap()
-                );
-            }
-            assert!(Args::try_parse_from(["yaya", name]).is_err());
-            assert!(Args::try_parse_from(["yaya", name, "-a", "-t", "1"]).is_err());
+    fn execution_commands_are_scoped_by_target() {
+        for action in ["suspend", "resume"] {
+            assert!(Args::try_parse_from(["yaya", "thread", action, "-t", "1"]).is_ok());
+            assert!(Args::try_parse_from(["yaya", "thread", action]).is_err());
+            assert!(Args::try_parse_from(["yaya", "vm", action]).is_ok());
+            assert!(Args::try_parse_from(["yaya", "vm", action, "-t", "1"]).is_err());
+            assert!(Args::try_parse_from(["yaya", action, "-t", "1"]).is_err());
+        }
+        for old in ["threads", "stack", "step"] {
+            assert!(Args::try_parse_from(["yaya", old]).is_err());
         }
     }
 
@@ -963,14 +935,15 @@ mod tests {
         assert!(
             Args::try_parse_from(["yaya", "events", "--wait", "2s", "--collect", "3s"]).is_err()
         );
-        assert!(Args::try_parse_from(["yaya", "step", "--thread", "1"]).is_err());
+        assert!(Args::try_parse_from(["yaya", "thread", "step", "--thread", "1"]).is_err());
         for pair in [
             ["--into", "--over"],
             ["--into", "--out"],
             ["--over", "--out"],
         ] {
             assert!(
-                Args::try_parse_from(["yaya", "step", "--thread", "1", pair[0], pair[1]]).is_err()
+                Args::try_parse_from(["yaya", "thread", "step", "--thread", "1", pair[0], pair[1]])
+                    .is_err()
             );
         }
         assert!(Args::try_parse_from(["yaya", "resume", "--all", "--thread", "1"]).is_err());

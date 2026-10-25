@@ -1,5 +1,0 @@
-Examples:
-  yaya suspend -t 0x12
-  yaya suspend --all
-
-Sends exactly one ThreadReference.Suspend or VirtualMachine.Suspend. Choose --thread/-t or --all/-a. Suspend counts accumulate; use resume explicitly to release each suspension. yaya does not mirror counts or automatically resume. Suspending the UI thread may prevent DDM dump/capture from completing.

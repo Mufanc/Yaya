@@ -1,4 +1,7 @@
 Examples:
+  yaya thread list
+  yaya thread stack -t 0x12
   yaya thread suspend-count -t 0x12
+  yaya thread step -t 0x12 --over
 
-Query an individual thread using its runtime object ID. Outside interactive mode, select a session using command options or YAYA_SESSION. Use threads to enumerate IDs.
+List threads, inspect their stacks and suspend counts, or explicitly suspend, resume and step a thread. Outside interactive mode, select a session using command options or YAYA_SESSION.

@@ -155,9 +155,7 @@ impl Core {
         })
     }
 
-    pub(super) async fn suspend(&self, thread: Option<u64>, all: bool) -> anyhow::Result<Data> {
-        ensure!(thread.is_some() != all, "choose thread or all");
-
+    pub(super) async fn suspend(&self, thread: Option<u64>) -> anyhow::Result<Data> {
         if let Some(thread) = thread {
             self.client.request(SuspendThread { thread }).await?;
         } else {
@@ -167,9 +165,7 @@ impl Core {
         Ok(super::confirmed("suspend_once"))
     }
 
-    pub(super) async fn resume(&self, thread: Option<u64>, all: bool) -> anyhow::Result<Data> {
-        ensure!(thread.is_some() != all, "choose thread or all");
-
+    pub(super) async fn resume(&self, thread: Option<u64>) -> anyhow::Result<Data> {
         if let Some(thread) = thread {
             self.client.request(ResumeThread { thread }).await?;
         } else {

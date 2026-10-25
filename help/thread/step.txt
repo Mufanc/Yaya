@@ -1,6 +1,6 @@
 Example:
-  yaya step --thread 0x12 --over
+  yaya thread step --thread 0x12 --over
   yaya events --wait 30s
-  yaya stack --thread 0x12
+  yaya thread stack --thread 0x12
 
 Outside interactive mode, select a session using command options or YAYA_SESSION. Choose exactly one depth. Registers a MIN-granularity step with Count=1 and EVENT_THREAD suspension, then sends one ThreadReference.Resume. Returns step_started and event_request_id after the registration and resume replies; use events to wait. Match a step_completed event whose request_id equals the returned event_request_id; unrelated events (including unknown target extensions) may arrive first, so keep reading when necessary. A breakpoint may stop the thread before the step completes. yaya does not cancel that step request. If resume fails, the error includes the created request ID; no automatic rollback is attempted.

@@ -1,0 +1,5 @@
+Examples:
+  yaya vm suspend
+  yaya vm resume
+
+Control execution of the whole VM. Outside interactive mode, select a session using command options or YAYA_SESSION.

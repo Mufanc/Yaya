@@ -1,0 +1,4 @@
+Examples:
+  yaya thread suspend -t 0x12
+
+Sends one ThreadReference.Suspend request. --thread/-t is required. Does not query or mirror suspend counts, retry, or automatically balance other requests. Outside interactive mode, select a session using command options or YAYA_SESSION. Suspend counts accumulate; explicitly resume to release each suspension. Suspending the UI thread may prevent DDM dump/capture from completing.

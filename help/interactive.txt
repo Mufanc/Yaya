@@ -1,5 +1,5 @@
 Examples:
-  threads
+  thread list
   class find 'com/example'
   events --wait 30s
   help frame get

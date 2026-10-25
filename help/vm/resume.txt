@@ -1,0 +1,4 @@
+Examples:
+  yaya vm resume
+
+Sends one VirtualMachine.Resume request. Does not query or mirror suspend counts, retry, or automatically balance other requests. Outside interactive mode, select a session using command options or YAYA_SESSION. Additional suspend counts may remain; does not loop until running or remove breakpoint/step requests.

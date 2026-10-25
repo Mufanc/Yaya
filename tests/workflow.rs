@@ -331,10 +331,11 @@ impl Fixture {
                 .unwrap();
             send(
                 &mut socket,
-                json!({"kind":"hello","version":8,"session":id}),
+                json!({"kind":"hello","version":9,"session":id}),
             );
             let response = recv(&mut socket);
             if response["kind"] == "ready" {
+                assert_eq!(response["version"], 9);
                 return socket;
             }
             assert!(Instant::now() < deadline, "{response}");
@@ -380,7 +381,7 @@ fn recv(socket: &mut UnixStream) -> Value {
 fn daemon_debugging_workflow() {
     let fixture = Fixture::new();
     let id = fixture.attach();
-    let (output, records) = fixture.run(&["threads", "--session", &id]);
+    let (output, records) = fixture.run(&["thread", "list", "--session", &id]);
     assert!(output.status.success(), "{records:?}");
     assert_eq!(records[0]["data"]["threads"][0]["name"], "main");
     let (output, records) = fixture.run(&["events", "--session", &id]);
@@ -397,12 +398,20 @@ fn daemon_debugging_workflow() {
     ]);
     assert!(output.status.success(), "{records:?}");
     assert_eq!(records[0]["data"]["event_request_id"], 77);
-    let (output, records) = fixture.run(&["step", "--session", &id, "--thread", "0x12", "--over"]);
+    let (output, records) = fixture.run(&[
+        "thread",
+        "step",
+        "--session",
+        &id,
+        "--thread",
+        "0x12",
+        "--over",
+    ]);
     assert!(output.status.success(), "{records:?}");
     let (output, records) = fixture.run(&["events", "--session", &id, "--wait", "2s"]);
     assert!(output.status.success(), "{records:?}");
     assert_eq!(records[0]["batch"]["events"][0]["kind"], "step_completed");
-    let (_, records) = fixture.run(&["stack", "--session", &id, "-t", "0x12"]);
+    let (_, records) = fixture.run(&["thread", "stack", "--session", &id, "-t", "0x12"]);
     let frame = records[0]["data"]["frames"][0]["frame"].as_str().unwrap();
     let (output, records) = fixture.run(&[
         "frame",
@@ -453,6 +462,35 @@ fn daemon_debugging_workflow() {
             .iter()
             .any(|(set, cmd, _)| (*set, *cmd) == (1, 10))
     );
+}
+
+#[test]
+fn old_protocol_is_rejected_before_commands() {
+    let fixture = Fixture::new();
+    let id = fixture.attach();
+    let path = fixture.temp.join("yaya").join(&id).join("control.sock");
+    let mut socket = UnixStream::connect(path).unwrap();
+    socket
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    send(
+        &mut socket,
+        json!({"kind":"hello","version":8,"session":id}),
+    );
+    let mut byte = [0];
+    assert_eq!(
+        socket.read(&mut byte).unwrap(),
+        0,
+        "old protocol must not receive Ready"
+    );
+    drop(socket);
+    let mut current = fixture.ipc(&id);
+    send(
+        &mut current,
+        json!({"kind":"execute","command":{"Thread":{"List":null}}}),
+    );
+    assert_eq!(recv(&mut current)["kind"], "result");
+    drop(current);
 }
 
 #[test]
@@ -507,7 +545,7 @@ fn submitted_operation_survives_client_disconnect() {
     let mut next = fixture.ipc(&id);
     send(
         &mut next,
-        json!({"kind":"execute","command":{"Threads":{}}}),
+        json!({"kind":"execute","command":{"Thread":{"List":null}}}),
     );
     let response = recv(&mut next);
     assert_eq!(response["kind"], "result", "{response}");
@@ -587,7 +625,7 @@ fn interactive_help_continues_to_the_next_command() {
         .stdin
         .take()
         .unwrap()
-        .write_all(b"help frame get\n--help\n--version\naaa bbb\nattach -p 8701\nsessions\ndaemon --id test --port 8701\nthreads -s s_abc123\nclass find Test --session s_abc123\nthreads\nstack --thread 0x12\nstack -t 0x12\nexit\n")
+        .write_all(b"help frame get\n--help\n--version\naaa bbb\nattach -p 8701\nsessions\ndaemon --id test --port 8701\nthread list -s s_abc123\nclass find Test --session s_abc123\nthread list\nthread stack --thread 0x12\nthread stack -t 0x12\nexit\n")
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
@@ -646,7 +684,7 @@ fn interactive_uses_same_commands_and_jsonl() {
         .stdin
         .take()
         .unwrap()
-        .write_all(b"events\nthreads\nstep --thread 0x12 --into --out\nclass find 'oops\nthreads\ndetach\n")
+        .write_all(b"events\nthread list\nthread step --thread 0x12 --into --out\nclass find 'oops\nthread list\ndetach\n")
         .unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
@@ -773,7 +811,7 @@ fn clap_errors_use_stderr_and_exit_code_two() {
     for args in [
         vec!["--unknown"],
         vec!["attach"],
-        vec!["step", "--thread", "1", "--into", "--out"],
+        vec!["thread", "step", "--thread", "1", "--into", "--out"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_yaya"))
             .args(args)
@@ -959,7 +997,7 @@ fn events_require_explicit_subscription_in_both_modes() {
                 .stdin
                 .take()
                 .unwrap()
-                .write_all(b"threads\nstatus\nevents\nevents -w 1s\nstatus\nexit\n")
+                .write_all(b"thread list\nstatus\nevents\nevents -w 1s\nstatus\nexit\n")
                 .unwrap();
             let output = child.wait_with_output().unwrap();
             assert!(output.status.success());
@@ -979,7 +1017,7 @@ fn events_require_explicit_subscription_in_both_modes() {
         } else {
             let id = fixture.attach();
             [
-                vec!["threads"],
+                vec!["thread", "list"],
                 vec!["status"],
                 vec!["events"],
                 vec!["events", "-w", "1s"],
@@ -1247,8 +1285,8 @@ fn primitive_inspection_works_over_socket_and_channel() {
         let fixture = Fixture::new();
         let commands = [
             "thread suspend-count -t 0x12",
-            "suspend -t 0x12",
-            "suspend --all",
+            "thread suspend -t 0x12",
+            "vm suspend",
             "thread suspend-count -t 0x12",
             "frame this 0x22 -t 0x12",
             "string get 0x55",
@@ -1261,9 +1299,9 @@ fn primitive_inspection_works_over_socket_and_channel() {
             "array get 0x66 4:5",
             "array set 0x66 0:1 --type byte --values=256",
             "array set 0x66 0:2 --type int --values=1",
-            "resume -t 0x12",
+            "thread resume -t 0x12",
             "thread suspend-count -t 0x12",
-            "resume --all",
+            "vm resume",
             "thread suspend-count -t 0x12",
         ];
         let records: Vec<Value> = if interactive {

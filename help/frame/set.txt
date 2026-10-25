@@ -2,4 +2,4 @@ Examples:
   yaya frame set 0x0 -t 0x12 v0 --type boolean --value false
   yaya frame set 0x0 -t 0x12 slot2 --type object --value 0x123
 
-Copy fresh frame and thread IDs from stack. Requires a suspended thread; no automatic suspension. Writes directly, without reading the old value, retrying or providing undo. Types: boolean, byte, char, short, int, long, float, double, object. Booleans: true/false; integers: decimal; char: numeric UTF-16 code unit; object: decimal/0x ID or null. vN maps directly to slot N on modern ART; use slotN for explicit protocol numbering.
+Copy fresh frame and thread IDs from thread stack. Requires a suspended thread; no automatic suspension. Writes directly, without reading the old value, retrying or providing undo. Types: boolean, byte, char, short, int, long, float, double, object. Booleans: true/false; integers: decimal; char: numeric UTF-16 code unit; object: decimal/0x ID or null. vN maps directly to slot N on modern ART; use slotN for explicit protocol numbering.

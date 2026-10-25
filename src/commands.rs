@@ -12,7 +12,7 @@ use anyhow::{Error, bail};
 use clap::Args as ClapArgs;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::{Command, Jdwp, StringCommand, Thread};
+use crate::cli::{Command, Jdwp, StringCommand, Thread, Vm};
 use crate::jdwp::JdwpClient;
 use crate::jdwp::string_reference::Value as StringValue;
 use crate::jdwp::thread_reference::SuspendCount;
@@ -95,34 +95,36 @@ impl Core {
                     value,
                 })
             }
-            Command::Thread {
-                command: Thread::SuspendCount { thread },
-                ..
-            } => {
-                let count = client.request(SuspendCount { thread }).await?;
-                Ok(Data::SuspendCount {
-                    thread: wire::id(thread),
-                    count,
-                })
-            }
+            Command::Thread { command, .. } => match command {
+                Thread::List => self.threads().await,
+                Thread::Stack { thread } => self.stack(thread).await,
+                Thread::Step {
+                    thread,
+                    into,
+                    over,
+                    out,
+                } => self.step(thread, into, over, out).await,
+                Thread::Suspend { thread } => self.suspend(Some(thread)).await,
+                Thread::Resume { thread } => self.resume(Some(thread)).await,
+                Thread::SuspendCount { thread } => {
+                    let count = client.request(SuspendCount { thread }).await?;
+                    Ok(Data::SuspendCount {
+                        thread: wire::id(thread),
+                        count,
+                    })
+                }
+            },
+            Command::Vm { command, .. } => match command {
+                Vm::Suspend => self.suspend(None).await,
+                Vm::Resume => self.resume(None).await,
+            },
             Command::Array { command, .. } => self.array(command).await,
-            Command::Suspend { target, .. } => self.suspend(target.thread, target.all).await,
             Command::Ddm { command, .. } => self.ddm(command).await,
             Command::Ui { command, .. } => return self.ui(command).await,
             Command::Class { command, .. } => self.class(command).await,
             Command::Object { command, .. } => self.object(command).await,
             Command::Break { command, .. } => self.breakpoint(command).await,
-            Command::Threads { .. } => self.threads().await,
-            Command::Stack { thread, .. } => self.stack(thread).await,
             Command::Frame { command, .. } => self.frame(command).await,
-            Command::Step {
-                thread,
-                into,
-                over,
-                out,
-                ..
-            } => self.step(thread, into, over, out).await,
-            Command::Resume { target, .. } => self.resume(target.thread, target.all).await,
             _ => bail!("command is not valid on an attached session"),
         }?;
 

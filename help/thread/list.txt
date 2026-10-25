@@ -1,0 +1,4 @@
+Example:
+  yaya thread list
+
+Use a returned thread ID for thread stack, thread step or thread resume. Suspend status is reported by JDWP; yaya does not maintain a shadow suspend count.
