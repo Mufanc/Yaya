@@ -7,14 +7,11 @@ mod session;
 mod wire;
 
 use clap::Parser;
-use tokio::net::UnixStream;
 use tokio::runtime::Builder;
 
-use crate::cli::{Args, EntryCommand};
-use crate::jdwp::Failure;
+use crate::cli::{Args, DaemonCommand, EntryCommand};
 use crate::reporter::Reporter;
 use crate::session::daemon::DaemonStartup;
-use crate::session::transport::Socket;
 
 fn main() {
     let args = Args::parse();
@@ -63,12 +60,28 @@ fn run(args: Args) -> anyhow::Result<bool> {
 
                 reporter.set_session(&id);
 
-                let stream = UnixStream::connect(session::socket_path(&id)?)
-                    .await
-                    .map_err(|error| Failure::new("session_unavailable", error.to_string()))?;
-                let mut connection = Socket::new(stream);
+                let mut connection = session::client::connect(&id).await?;
 
                 session::client::execute(&mut connection, &id, command, &mut reporter).await
+            });
+
+            reporter.finish(result)
+        }
+        EntryCommand::Daemon {
+            session,
+            command: DaemonCommand::Stop,
+        } => {
+            let mut reporter = Reporter::new();
+            let result = block_on(async {
+                let id = session::selected(session.session)?;
+
+                reporter.set_session(&id);
+
+                let mut connection = session::client::connect(&id).await?;
+                let data = session::client::stop(&mut connection, &id).await?;
+
+                reporter.result(data)?;
+                Ok("completed")
             });
 
             reporter.finish(result)

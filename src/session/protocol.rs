@@ -12,6 +12,8 @@ pub(super) const PROTOCOL: u32 = 10;
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[serde(bound(serialize = "", deserialize = "S: Default"))]
 pub(crate) enum ClientMessage<S: Args = SessionArgs> {
+    // Stable control message: accepted without a business-protocol handshake.
+    Stop { session: String },
     Hello { version: u32, session: String },
     Execute { command: Command<S> },
     Subscribe { drain: bool },
@@ -21,6 +23,7 @@ pub(crate) enum ClientMessage<S: Args = SessionArgs> {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum ServerMessage {
+    Stopped,
     Ready { version: u32, session: String },
     Result { result: CommandResult },
     Error { error: Failure },

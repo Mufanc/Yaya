@@ -12,3 +12,5 @@ Android DDM: ui windows enumerates ViewRoots, ui dump decodes a fresh V2 hierarc
 Primitive inspection: string get reads string contents; array length/get/set exposes array operations; frame this returns the receiver; object referrers queries direct references. thread suspend and vm suspend explicitly pause their respective targets; thread suspend-count queries the VM without local state tracking.
 
 Event watches: exception watch defaults to uncaught only; --with-caught includes caught exceptions and --caught-only selects only caught exceptions. class prepare watch observes future class preparation. field access/modification watch observes reads/writes of a declared field. watch returns a VM request ID immediately; receive events using events and clear with the corresponding unwatch ID command.
+
+Daemon control: daemon stop ends an existing daemon and its JDWP connection through a stable control message, independently of business IPC version. It uses the same socket and single-client rule; detach remains the explicit JDWP Dispose operation.

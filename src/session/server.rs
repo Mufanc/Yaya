@@ -44,7 +44,7 @@ impl Server {
     where
         T: Transport<Incoming = ClientMessage<S>, Outgoing = ServerMessage>,
     {
-        // Consume Hello before closing a socket, so unread input cannot reset the busy reply.
+        // Consume the first message before closing, so unread input cannot reset the busy reply.
         let _ = time::timeout(Duration::from_millis(100), connection.receive()).await;
         let _ = time::timeout(
             Duration::from_millis(100),
@@ -64,13 +64,42 @@ impl Server {
             Self::reject(connection).await;
             return Ok(());
         };
-        let hello =
+        let first_message =
             time::timeout(Duration::from_secs(5), transport::receive(&mut connection)).await??;
 
-        ensure!(
-            matches!(hello, ClientMessage::Hello { version: PROTOCOL, session } if session == self.session),
-            "IPC session/version mismatch"
-        );
+        match first_message {
+            ClientMessage::Stop { session } if session == self.session => {
+                self.client.close().await;
+
+                let response = time::timeout(
+                    Duration::from_millis(250),
+                    connection.send(ServerMessage::Stopped),
+                )
+                .await;
+
+                self.stop.send_replace(true);
+
+                response??;
+                return Ok(());
+            }
+            ClientMessage::Hello { version, session } if session == self.session => {
+                if version != PROTOCOL {
+                    let error = Failure::new(
+                        "protocol_mismatch",
+                        format!(
+                            "IPC protocol mismatch: client {version}, daemon {PROTOCOL}; end this session with yaya daemon stop -s {} before attaching again",
+                            self.session
+                        ),
+                    );
+
+                    connection.send(ServerMessage::Error { error }).await?;
+
+                    return Ok(());
+                }
+            }
+            _ => bail!("invalid session handshake"),
+        }
+
         connection
             .send(ServerMessage::Ready {
                 version: PROTOCOL,

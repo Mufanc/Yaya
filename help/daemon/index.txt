@@ -1,0 +1,4 @@
+Example:
+  yaya daemon stop -s s_k7m2px
+
+Controls the daemon hosting the selected session. Use -s/--session or YAYA_SESSION. This command group is unavailable inside interactive mode. Read 'yaya daemon stop --help' for shutdown behavior.

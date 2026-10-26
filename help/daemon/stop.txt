@@ -1,0 +1,6 @@
+Examples:
+  yaya daemon stop -s s_k7m2px
+  YAYA_SESSION=s_k7m2px yaya daemon stop
+
+Stops the selected daemon using a stable control message on its existing Unix socket, without a business-protocol handshake. This allows a newer client to stop a daemon whose business IPC version is incompatible, provided the daemon implements this control message. The control message and acknowledgement retain their wire format across business protocol versions. Like other commands, stop is rejected when another client is active; finish or interrupt an events wait before stopping.
+Shutdown attempts JDWP VirtualMachine.Dispose for at most two seconds, then closes the target connection even if Dispose fails. No VM.Exit is sent. Closing the connection loses the debugging session and runtime references; the application may resume. The daemon acknowledges after closing the target connection, then cleans up its socket and session directory and exits. Success confirms shutdown, not successful Dispose or completion of filesystem cleanup. Use detach when you want the explicit JDWP Dispose result. A timeout or lost acknowledgement leaves shutdown outcome unknown; do not infer that the daemon is still running. Daemons predating this control message cannot be stopped this way.

@@ -574,12 +574,12 @@ fn old_protocol_is_rejected_before_commands() {
         &mut socket,
         json!({"kind":"hello","version":9,"session":id}),
     );
-    let mut byte = [0];
-    assert_eq!(
-        socket.read(&mut byte).unwrap(),
-        0,
-        "old protocol must not receive Ready"
-    );
+    let response = recv(&mut socket);
+    assert_eq!(response["kind"], "error");
+    assert_eq!(response["error"]["code"], "protocol_mismatch");
+    let message = response["error"]["message"].as_str().unwrap();
+    assert!(message.contains("client 9, daemon 10"), "{response}");
+    assert!(message.contains("yaya daemon stop -s"), "{response}");
     drop(socket);
     let mut current = fixture.ipc(&id);
     send(
@@ -588,6 +588,99 @@ fn old_protocol_is_rejected_before_commands() {
     );
     assert_eq!(recv(&mut current)["kind"], "result");
     drop(current);
+}
+
+#[test]
+fn daemon_stop_bypasses_business_version_and_cleans_up() {
+    for use_cli in [false, true] {
+        let fixture = Fixture::new();
+        let id = fixture.attach();
+        let directory = fixture.temp.join("yaya").join(&id);
+        let path = directory.join("control.sock");
+        let mut connection = UnixStream::connect(&path).unwrap();
+        connection
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        send(
+            &mut connection,
+            json!({"kind":"hello","version":u32::MAX,"session":id}),
+        );
+        let response = recv(&mut connection);
+        assert_eq!(response["error"]["code"], "protocol_mismatch");
+        assert!(
+            !fixture
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(set, command, _)| (*set, *command) == (1, 6))
+        );
+        drop(connection);
+        if use_cli {
+            let (output, rows) = fixture.run(&["daemon", "stop", "-s", &id]);
+            assert!(output.status.success(), "{rows:?}");
+            assert_eq!(rows[0]["data"]["operation"], "daemon_stop");
+            assert_eq!(rows[1]["ok"], true);
+        } else {
+            let mut connection = UnixStream::connect(&path).unwrap();
+            connection
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            // The stable control request has no business protocol version or Hello.
+            send(&mut connection, json!({"kind":"stop","session":id}));
+            assert_eq!(recv(&mut connection), json!({"kind":"stopped"}));
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while directory.exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!directory.exists(), "daemon did not clean up");
+        assert_eq!(
+            fixture
+                .requests
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(set, command, _)| (*set, *command) == (1, 6))
+                .count(),
+            1
+        );
+        let (output, rows) = fixture.run(&["status", "-s", &id]);
+        assert!(!output.status.success());
+        assert_eq!(rows[0]["error"]["code"], "session_unavailable");
+    }
+}
+
+#[test]
+fn daemon_stop_obeys_single_client_rule_and_session_selection() {
+    let fixture = Fixture::new();
+    let id = fixture.attach();
+    let active = fixture.ipc(&id);
+    let (output, rows) = fixture.run(&["daemon", "stop", "-s", &id]);
+    assert!(!output.status.success());
+    assert_eq!(rows[0]["error"]["code"], "session_busy");
+    assert!(
+        !fixture
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(set, command, _)| (*set, *command) == (1, 6))
+    );
+    drop(active);
+    let output = fixture
+        .command()
+        .env("YAYA_SESSION", &id)
+        .args(["daemon", "stop"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let (output, _) = fixture.run(&["daemon", "stop"]);
+    assert!(!output.status.success());
 }
 
 #[test]
@@ -998,15 +1091,6 @@ fn attach_failure_reports_error_and_removes_session() {
             .unwrap()
             .next()
             .is_none()
-    );
-    assert!(
-        !fixture
-            .command()
-            .args(["daemon", "--help"])
-            .output()
-            .unwrap()
-            .status
-            .success()
     );
 }
 

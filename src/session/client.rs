@@ -3,14 +3,45 @@ use std::time::Duration;
 
 use anyhow::{Context, bail, ensure};
 use clap::Args;
+use tokio::net::UnixStream;
 use tokio::time::{self, Instant};
 
 use super::protocol::{ClientMessage, PROTOCOL, ServerMessage};
-use super::transport::{self, Transport};
+use super::transport::{self, Socket, Transport};
 use crate::cli::Command;
-use crate::commands::CommandResult;
+use crate::commands::{CommandResult, Data};
 use crate::events::{Delivery, Payload, SuspendPolicy};
+use crate::jdwp::Failure;
 use crate::reporter::Reporter;
+
+pub async fn connect(id: &str) -> anyhow::Result<Socket<ClientMessage, ServerMessage>> {
+    let stream = UnixStream::connect(super::socket_path(id)?)
+        .await
+        .map_err(|error| Failure::new("session_unavailable", error.to_string()))?;
+
+    Ok(Socket::new(stream))
+}
+
+pub async fn stop(
+    connection: &mut impl Transport<Outgoing = ClientMessage, Incoming = ServerMessage>,
+    id: &str,
+) -> anyhow::Result<Data> {
+    time::timeout(Duration::from_secs(5), async {
+        connection
+            .send(ClientMessage::Stop { session: id.into() })
+            .await?;
+
+        match transport::receive(connection).await? {
+            ServerMessage::Stopped => Ok(Data::Confirmed {
+                operation: "daemon_stop".into(),
+            }),
+            ServerMessage::Error { error } => Err(error.into()),
+            _ => bail!("invalid daemon stop response"),
+        }
+    })
+    .await
+    .context("daemon stop timeout; shutdown outcome is unknown")?
+}
 
 pub async fn execute<
     S: Args,

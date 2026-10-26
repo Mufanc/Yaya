@@ -56,8 +56,23 @@ pub enum EntryCommand {
     /// List session-directory IDs without checking whether they are alive.
     #[command(after_help = help_text!("sessions"))]
     Sessions,
+    /// Control an existing session daemon independently of the business protocol.
+    #[command(after_help = help_text!("daemon/index"))]
+    Daemon {
+        #[command(flatten)]
+        session: SessionArgs,
+        #[command(subcommand)]
+        command: DaemonCommand,
+    },
     #[command(flatten)]
     SessionCommand(Command),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DaemonCommand {
+    /// Stop the daemon and release its debugging connection.
+    #[command(after_help = help_text!("daemon/stop"))]
+    Stop,
 }
 
 #[derive(ClapArgs, Clone, Debug, Default)]
@@ -886,6 +901,26 @@ mod tests {
             assert!(command.find_subcommand(name).is_none());
         }
         check_help(&mut command);
+    }
+
+    #[test]
+    fn daemon_control_uses_existing_session_arguments() {
+        for args in [
+            vec!["daemon", "stop", "-s", "s_abc123"],
+            vec!["daemon", "--session", "s_abc123", "stop"],
+        ] {
+            let parsed = Args::try_parse_from(std::iter::once("yaya").chain(args)).unwrap();
+            let EntryCommand::Daemon {
+                session,
+                command: DaemonCommand::Stop,
+            } = parsed.command
+            else {
+                panic!("expected daemon stop");
+            };
+            assert_eq!(session.session.as_deref(), Some("s_abc123"));
+        }
+        assert!(Args::try_parse_from(["yaya", "daemon"]).is_err());
+        assert!(InteractiveArgs::try_parse_from(["yaya", "daemon", "stop"]).is_err());
     }
 
     #[test]
